@@ -43,6 +43,10 @@ const client = new MongoClient(process.env.MONGODB_URI, {
   },
 });
 async function run() {
+  
+  const taskCollection = client.db("MicroJob").collection("tasks")
+
+
   try {
     // Generate jwt token
     app.post("/jwt", async (req, res) => {
@@ -72,6 +76,16 @@ async function run() {
         res.status(500).send(err);
       }
     });
+
+    // add a tasks in DB
+    app.post("/add-task", async(req, res) => {
+      const task = req.body;
+      const result = await taskCollection.insertOne(task);
+      res.send(result)
+    })
+
+
+
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
