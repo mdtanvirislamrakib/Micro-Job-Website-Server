@@ -4,6 +4,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
+const e = require("express");
 
 const port = process.env.PORT || 3000;
 const app = express();
@@ -84,6 +85,16 @@ async function run() {
       res.send(result)
     })
 
+    // my added tasks in DB
+    app.get("/my-tasks/:email", async(req, res) => {
+      const email = req?.params?.email;
+      const filter = {"buyer.email":email};
+      const result = await taskCollection.find(filter).toArray()
+      res.send(result);
+    })
+
+
+
     // show all tasks
     app.get("/tasks", async(req, res) => {
       const filter = {
@@ -94,6 +105,8 @@ async function run() {
       const result = await taskCollection.find(filter).toArray()
       res.send(result);
     })
+
+
 
 
     // Send a ping to confirm a successful connection
