@@ -44,9 +44,7 @@ const client = new MongoClient(process.env.MONGODB_URI, {
   },
 });
 async function run() {
-  
-  const taskCollection = client.db("MicroJob").collection("tasks")
-
+  const taskCollection = client.db("MicroJob").collection("tasks");
 
   try {
     // Generate jwt token
@@ -79,35 +77,47 @@ async function run() {
     });
 
     // add a tasks in DB
-    app.post("/add-task", async(req, res) => {
+    app.post("/add-task", async (req, res) => {
       const task = req.body;
       const result = await taskCollection.insertOne(task);
-      res.send(result)
-    })
+      res.send(result);
+    });
 
     // my added tasks in DB
-    app.get("/my-tasks/:email", async(req, res) => {
+    app.get("/my-tasks/:email", async (req, res) => {
       const email = req?.params?.email;
-      const filter = {"buyer.email":email};
-      const result = await taskCollection.find(filter).toArray()
+      const filter = { "buyer.email": email };
+      const result = await taskCollection.find(filter).toArray();
       res.send(result);
-    })
+    });
 
+    // Update an existing task (using email from header for authorization)
+    app.patch("/tasks/:id", async (req, res) => {
+      const taskId = req.params.id;
+      const updateTasks = req?.body;
+      delete updateTasks._id;
 
+      // Ensure the user is the owner of the task
+      const query = { _id: new ObjectId(taskId)};
+      const updateDoc = {
+        $set: updateTasks
+      };
+
+      const result = await taskCollection.updateOne(query, updateDoc);
+
+      res.send(result);
+    });
 
     // show all tasks
-    app.get("/tasks", async(req, res) => {
+    app.get("/tasks", async (req, res) => {
       const filter = {
         requiredWorkers: {
-          $gt: 0
-        }
-      }
-      const result = await taskCollection.find(filter).toArray()
+          $gt: 0,
+        },
+      };
+      const result = await taskCollection.find(filter).toArray();
       res.send(result);
-    })
-
-
-
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
