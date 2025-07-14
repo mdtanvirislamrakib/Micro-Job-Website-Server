@@ -98,14 +98,23 @@ async function run() {
       delete updateTasks._id;
 
       // Ensure the user is the owner of the task
-      const query = { _id: new ObjectId(taskId)};
+      const query = { _id: new ObjectId(taskId) };
       const updateDoc = {
-        $set: updateTasks
+        $set: updateTasks,
       };
 
       const result = await taskCollection.updateOne(query, updateDoc);
 
       res.send(result);
+    });
+
+    // DELETE endpoint for deleting a task by ID
+    app.delete("/tasks/:id", async (req, res) => {
+      const taskId = req.params.id;
+
+      const query = { _id: new ObjectId(taskId) };
+      const result = await taskCollection.deleteOne(query);
+      res.send(result)
     });
 
     // show all tasks
