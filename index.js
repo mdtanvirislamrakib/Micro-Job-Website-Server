@@ -84,7 +84,16 @@ async function run() {
       res.send(result)
     })
 
-
+    // show all tasks
+    app.get("/tasks", async(req, res) => {
+      const filter = {
+        requiredWorkers: {
+          $gt: 0
+        }
+      }
+      const result = await taskCollection.find(filter).toArray()
+      res.send(result);
+    })
 
 
     // Send a ping to confirm a successful connection
