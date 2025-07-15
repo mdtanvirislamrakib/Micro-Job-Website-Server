@@ -46,6 +46,7 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 async function run() {
   const taskCollection = client.db("MicroJob").collection("tasks");
   const coinCollection = client.db("MicroJob").collection("coin");
+  const purchasedCoinCollection = client.db("MicroJob").collection("purchasedCoin")
 
   try {
     // Generate jwt token
@@ -137,7 +138,7 @@ async function run() {
 
     // create create-payment-intent for purchase coin
     app.post("/create-payment-intent", async (req, res) => {
-      const { coinsPurchased, packageId } = req?.body;
+      const { packageId } = req?.body;
 
       const filter = { id: packageId };
       const purchaseCoin = await coinCollection.findOne(filter);
@@ -154,6 +155,14 @@ async function run() {
 
       res.send({clientSecret: paymentIntent?.client_secret});
     });
+
+
+    // post data who purchase coin
+    app.post("/save-purchase", async(req, res) => {
+      const purchasedCoin = req?.body;
+      const result = await purchasedCoinCollection.insertOne(purchasedCoin)
+      res.send(result);
+    })
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
