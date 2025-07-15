@@ -165,6 +165,13 @@ async function run() {
       res.send(result);
     });
 
+    // get all transaction from Db
+    app.get("/transactions", async(req, res) => {
+      const result = await purchasedCoinCollection.find().toArray()
+      res.send(result)
+    })
+
+
     // get puchased coin data by login user
     app.get("/my-coins", async (req, res) => {
       const email = req?.query?.email;
