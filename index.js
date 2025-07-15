@@ -46,9 +46,8 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 async function run() {
   const taskCollection = client.db("MicroJob").collection("tasks");
   const coinCollection = client.db("MicroJob").collection("coin");
-  const purchasedCoinCollection = client
-    .db("MicroJob")
-    .collection("purchasedCoin");
+  const purchasedCoinCollection = client.db("MicroJob").collection("purchasedCoin");
+  const usersCollection = client.db("MicroJob").collection("users")
 
   try {
     // Generate jwt token
@@ -79,6 +78,16 @@ async function run() {
         res.status(500).send(err);
       }
     });
+
+    // save or update user info in Db
+    app.post("/users", async(req, res) => {
+      const userData = req.body;
+      return console.log(userData);
+      const result = await usersCollection.insertOne(userData)
+      res.send(result);
+    })
+
+
 
     // add a tasks in DB
     app.post("/add-task", async (req, res) => {
