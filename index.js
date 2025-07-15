@@ -46,7 +46,9 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 async function run() {
   const taskCollection = client.db("MicroJob").collection("tasks");
   const coinCollection = client.db("MicroJob").collection("coin");
-  const purchasedCoinCollection = client.db("MicroJob").collection("purchasedCoin")
+  const purchasedCoinCollection = client
+    .db("MicroJob")
+    .collection("purchasedCoin");
 
   try {
     // Generate jwt token
@@ -153,16 +155,28 @@ async function run() {
         },
       });
 
-      res.send({clientSecret: paymentIntent?.client_secret});
+      res.send({ clientSecret: paymentIntent?.client_secret });
     });
 
-
     // post data who purchase coin
-    app.post("/save-purchase", async(req, res) => {
+    app.post("/save-purchase", async (req, res) => {
       const purchasedCoin = req?.body;
-      const result = await purchasedCoinCollection.insertOne(purchasedCoin)
+      const result = await purchasedCoinCollection.insertOne(purchasedCoin);
       res.send(result);
-    })
+    });
+
+    // get puchased coin data by login user
+    app.get("/my-coins", async (req, res) => {
+      const email = req?.query?.email;
+
+      if (!email) {
+        return res.status(400).send({ error: "Email is required" });
+      }
+
+      const purchases = await purchasedCoinCollection.find({ userEmail: email }).toArray();
+      const totalCoins = purchases.reduce((sum, item) => sum + (item.coinsPurchased || 0), 0);
+      res.send(totalCoins)
+    });
 
     // Send a ping to confirm a successful connection
     await client.db("admin").command({ ping: 1 });
