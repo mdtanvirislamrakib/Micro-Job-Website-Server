@@ -4,7 +4,7 @@ const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
 const jwt = require("jsonwebtoken");
-const e = require("express");
+const stripe = require("stripe")(process.env.STRIPE_SK_KEY);
 
 const port = process.env.PORT || 3000;
 const app = express();
@@ -45,6 +45,7 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 });
 async function run() {
   const taskCollection = client.db("MicroJob").collection("tasks");
+  const coinCollection = client.db("MicroJob").collection("coin");
 
   try {
     // Generate jwt token
@@ -114,7 +115,7 @@ async function run() {
 
       const query = { _id: new ObjectId(taskId) };
       const result = await taskCollection.deleteOne(query);
-      res.send(result)
+      res.send(result);
     });
 
     // show all tasks
@@ -126,6 +127,32 @@ async function run() {
       };
       const result = await taskCollection.find(filter).toArray();
       res.send(result);
+    });
+
+    // get all coins
+    app.get("/coins", async (req, res) => {
+      const result = await coinCollection.find().toArray();
+      res.send(result);
+    });
+
+    // create create-payment-intent for purchase coin
+    app.post("/create-payment-intent", async (req, res) => {
+      const { coinsPurchased, packageId } = req?.body;
+
+      const filter = { id: packageId };
+      const purchaseCoin = await coinCollection.findOne(filter);
+      const price = purchaseCoin?.price * 100;
+
+      // Stripe......
+      const paymentIntent = await stripe.paymentIntents.create({
+        amount: price,
+        currency: "usd",
+        automatic_payment_methods: {
+          enabled: true,
+        },
+      });
+
+      res.send({clientSecret: paymentIntent?.client_secret});
     });
 
     // Send a ping to confirm a successful connection
