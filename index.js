@@ -196,11 +196,9 @@ async function run() {
       const parsedAddedCoin = parseFloat(addedCoin) || 0;
 
       if (!email || isNaN(parsedAddedCoin)) {
-        return res
-          .status(400)
-          .send({
-            error: "Invalid request: Email or addedCoin missing/invalid",
-          });
+        return res.status(400).send({
+          error: "Invalid request: Email or addedCoin missing/invalid",
+        });
       }
 
       const filter = { email: email };
@@ -237,11 +235,9 @@ async function run() {
       const parsedCoinToUpdate = parseFloat(coinToUpdate) || 0;
 
       if (!email || isNaN(parsedCoinToUpdate)) {
-        return res
-          .status(400)
-          .send({
-            error: "Invalid request: Email or coin amount missing/invalid",
-          });
+        return res.status(400).send({
+          error: "Invalid request: Email or coin amount missing/invalid",
+        });
       }
 
       const filter = { email };
@@ -301,6 +297,13 @@ async function run() {
       };
       const result = await taskCollection.find(filter).toArray();
       res.send(result);
+    });
+
+    app.get("/task/:id", async (req, res) => {
+      const id = req.params.id;
+      const query = { _id: new ObjectId(id) };
+      const task = await taskCollection.findOne(query);
+      res.send(task);
     });
 
     // get all coins
@@ -388,12 +391,10 @@ async function run() {
 
       if (!user) {
         // If user not found, return 0 coins
-        return res
-          .status(200)
-          .send({
-            currentCoin: 0,
-            message: "User not found, returning 0 coins",
-          });
+        return res.status(200).send({
+          currentCoin: 0,
+          message: "User not found, returning 0 coins",
+        });
       }
 
       // Ensure that user.coin is a number, default to 0 if NaN or invalid
