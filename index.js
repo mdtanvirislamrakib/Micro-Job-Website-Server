@@ -96,6 +96,13 @@ async function run() {
       res.send(result);
     })
 
+    // get submission task data for worker
+    app.get("/submissionData", async(req, res) => {
+      const result = await taskSubmitCollection.find().toArray()
+      res.send(result)
+    })
+
+
     // আপনার server.js ফাইল থেকে
     app.post("/users", async (req, res) => {
       const userData = req.body;
