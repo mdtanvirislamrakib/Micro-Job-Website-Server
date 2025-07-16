@@ -58,22 +58,27 @@ async function run() {
       const token = jwt.sign(email, process.env.ACCESS_TOKEN_SECRET, {
         expiresIn: "365d",
       });
+
+      const isProduction = process.env.NODE_ENV === "production";
+
       res
         .cookie("token", token, {
           httpOnly: true,
-          secure: process.env.NODE_ENV === "production",
-          sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+          secure: isProduction,
+          sameSite: isProduction ? "none" : "Lax", // Changed to Lax for better local dev compatibility
         })
         .send({ success: true });
     });
     // Logout
     app.get("/logout", async (req, res) => {
       try {
+        const isProduction = process.env.NODE_ENV === "production";
         res
           .clearCookie("token", {
             maxAge: 0,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: process.env.NODE_ENV === "production" ? "none" : "strict",
+            secure: isProduction,
+            httpOnly: true, // It's good practice to include httpOnly here too
+            sameSite: isProduction ? "none" : "Lax", // Changed to Lax
           })
           .send({ success: true });
       } catch (err) {
@@ -81,46 +86,129 @@ async function run() {
       }
     });
 
-    // save or update user info in Db
+    // --- Start of /users endpoint changes ---
+    // app.post("/users", async (req, res) => {
+    //   const userData = req.body;
+    //   console.log("Received userData (original):", userData); // Debugging original data
+
+    //   userData.created_at = new Date().toISOString();
+    //   userData.last_login = new Date().toISOString();
+
+    //   // Determine the role. If client sends a role, use it. Otherwise, default to "worker".
+    //   // You might want to add validation if only specific roles are allowed.
+    //   userData.role = req?.body?.role || "worker";
+
+    //   const filter = { email: userData?.email };
+    //   const userAlreadyExists = await usersCollection.findOne(filter);
+
+    //   if (userAlreadyExists) {
+    //     // User already exists, only update last_login
+    //     // We do NOT update 'coin' here, as it would reset the existing balance.
+    //     // If you intend to increment coins on every login, you'd use $inc.
+    //     const updateDoc = {
+    //       $set: {
+    //         last_login: new Date().toISOString(),
+    //       },
+    //     };
+    //     console.log(
+    //       "User exists, updating last_login:",
+    //       userAlreadyExists.email
+    //     );
+    //     const result = await usersCollection.updateOne(filter, updateDoc);
+    //     return res.send(result);
+    //   } else {
+    //     // New user registration, assign initial coins based on role
+    //     let initialCoins = 0;
+    //     if (userData.role === "worker") {
+    //       initialCoins = 10;
+    //     } else if (userData.role === "buyer") {
+    //       // Assuming 'buyer' is the other possible role
+    //       initialCoins = 50;
+    //     }
+    //     // If role is neither, or any other role, initialCoins remains 0.
+
+    //     userData.coin = initialCoins; // Set the initial coin value for new users
+
+    //     console.log(
+    //       "New user registering with role:",
+    //       userData.role,
+    //       "and initial coins:",
+    //       userData.coin
+    //     );
+    //     const result = await usersCollection.insertOne(userData);
+    //     return res.send(result);
+    //   }
+    // });
+
+    // আপনার server.js ফাইল থেকে
     app.post("/users", async (req, res) => {
       const userData = req.body;
-      console.log(userData);
+      console.log("Received userData (original):", userData);
+
       userData.created_at = new Date().toISOString();
       userData.last_login = new Date().toISOString();
-      userData.role = req?.body?.role || "worker";
-      userData.coin = req?.body?.coin ?? 0;
+
+      // Determine the role. If client sends a role, use it. Otherwise, default to "worker".
+      userData.role = req?.body?.role || "worker"; // এখানে ক্লায়েন্ট থেকে আসা role ব্যবহৃত হবে
 
       const filter = { email: userData?.email };
       const userAlreadyExists = await usersCollection.findOne(filter);
 
-      if (!!userAlreadyExists) {
+      if (userAlreadyExists) {
+        // ইউজার আগে থেকেই থাকলে, শুধু last_login আপডেট হবে। কয়েন রিসেট হবে না।
         const updateDoc = {
           $set: {
             last_login: new Date().toISOString(),
           },
-          $inc: {
-            coin: req?.body?.coin ?? 0,
-          },
         };
+        console.log(
+          "User exists, updating last_login:",
+          userAlreadyExists.email
+        );
         const result = await usersCollection.updateOne(filter, updateDoc);
+        return res.send(result);
+      } else {
+        // নতুন ইউজার রেজিস্ট্রেশন, রোল অনুযায়ী ইনিশিয়াল কয়েন সেট হবে
+        let initialCoins = 0;
+        if (userData.role === "worker") {
+          initialCoins = 10;
+        } else if (userData.role === "buyer") {
+          initialCoins = 50;
+        }
+        userData.coin = initialCoins; // নতুন ইউজারের জন্য কয়েন সেট হচ্ছে
+
+        console.log(
+          "New user registering with role:",
+          userData.role,
+          "and initial coins:",
+          userData.coin
+        );
+        const result = await usersCollection.insertOne(userData);
         return res.send(result);
       }
     });
+    // --- End of /users endpoint changes ---
 
-    // server-side route (Express.js)
     app.patch("/update-coin", async (req, res) => {
-      const email = req.body?.email;
-      const addedCoin = parseInt(req.body?.addedCoin);
+      const { email, addedCoin } = req.body;
 
-      if (!email || isNaN(addedCoin)) {
-        return res.status(400).send({ error: "Invalid request" });
+      // Ensure addedCoin is a number, default to 0 if NaN or invalid
+      const parsedAddedCoin = parseFloat(addedCoin) || 0;
+
+      if (!email || isNaN(parsedAddedCoin)) {
+        return res
+          .status(400)
+          .send({
+            error: "Invalid request: Email or addedCoin missing/invalid",
+          });
       }
 
-      const filter = { email };
+      const filter = { email: email };
       const update = {
-        $inc: { coin: addedCoin },
+        $inc: { coin: parsedAddedCoin },
       };
 
+      console.log(`Updating coin for ${email} by ${parsedAddedCoin}`); // Debugging
       const result = await usersCollection.updateOne(filter, update);
       res.send(result);
     });
@@ -144,16 +232,30 @@ async function run() {
     app.patch("/decrease-coin/:email", async (req, res) => {
       const { coinToUpdate, status } = req?.body;
       const email = req?.params?.email;
+
+      // Ensure coinToUpdate is a number, default to 0 if NaN or invalid
+      const parsedCoinToUpdate = parseFloat(coinToUpdate) || 0;
+
+      if (!email || isNaN(parsedCoinToUpdate)) {
+        return res
+          .status(400)
+          .send({
+            error: "Invalid request: Email or coin amount missing/invalid",
+          });
+      }
+
       const filter = { email };
       const updateDoc = {
         $inc: {
-          coin: status === "decrease" ? -parseInt(coinToUpdate): parseInt(coinToUpdate),
+          coin:
+            status === "decrease" ? -parsedCoinToUpdate : parsedCoinToUpdate,
         },
       };
+      console.log(
+        `Processing decrease/increase coin for ${email}. Status: ${status}, Amount: ${parsedCoinToUpdate}`
+      ); // Debugging
       const result = await usersCollection.updateOne(filter, updateDoc);
       res.send(result);
-      
-      console.log(coinToUpdate, status);
     });
 
     // my added tasks in DB
@@ -213,7 +315,14 @@ async function run() {
 
       const filter = { id: packageId };
       const purchaseCoin = await coinCollection.findOne(filter);
-      const price = purchaseCoin?.price * 100;
+      // Ensure price is a number, default to 0 if NaN or invalid
+      const price = parseFloat(purchaseCoin?.price) * 100 || 0;
+
+      if (price <= 0) {
+        return res
+          .status(400)
+          .send({ error: "Invalid price for payment intent" });
+      }
 
       // Stripe......
       const paymentIntent = await stripe.paymentIntents.create({
@@ -227,29 +336,22 @@ async function run() {
       res.send({ clientSecret: paymentIntent?.client_secret });
     });
 
-    // post data who purchase coin
-    // app.post("/save-purchase", async (req, res) => {
-    //   const purchasedCoin = req?.body;
-    //   const result = await purchasedCoinCollection.insertOne(purchasedCoin);
-    //   res.send(result);
-    // });
-
     // Save purchase info and update user coin balance
     app.post("/save-purchase", async (req, res) => {
       try {
         const purchasedCoin = req?.body;
 
-        if (
-          !purchasedCoin?.userEmail ||
-          typeof purchasedCoin?.coinsPurchased !== "number"
-        ) {
+        // Ensure coinsPurchased is a number, default to 0 if NaN or invalid
+        purchasedCoin.coinsPurchased =
+          parseFloat(purchasedCoin.coinsPurchased) || 0;
+
+        if (!purchasedCoin?.userEmail || purchasedCoin?.coinsPurchased < 0) {
           return res.status(400).send({ error: "Invalid purchase data" });
         }
 
-        // Save purchase info in purchasedCoinCollection
         const result = await purchasedCoinCollection.insertOne(purchasedCoin);
 
-        //  Increment user's coin in users collection
+        // Increment user's coin in users collection
         const updateCoin = await usersCollection.updateOne(
           { email: purchasedCoin.userEmail },
           { $inc: { coin: purchasedCoin.coinsPurchased } }
@@ -274,24 +376,7 @@ async function run() {
       res.send(result);
     });
 
-    // get puchased coin data by login user
-    // app.get("/my-coins", async (req, res) => {
-    //   const email = req?.query?.email;
-
-    //   if (!email) {
-    //     return res.status(400).send({ error: "Email is required" });
-    //   }
-
-    //   const purchases = await purchasedCoinCollection
-    //     .find({ userEmail: email })
-    //     .toArray();
-    //   const totalCoins = purchases.reduce(
-    //     (sum, item) => sum + (item.coinsPurchased || 0),
-    //     0
-    //   );
-    //   res.send(totalCoins);
-    // });
-
+    // get purchased coin data by login user (from user's current coin balance)
     app.get("/my-coins", async (req, res) => {
       const email = req?.query?.email;
 
@@ -302,10 +387,18 @@ async function run() {
       const user = await usersCollection.findOne({ email });
 
       if (!user) {
-        return res.status(404).send({ error: "User not found" });
+        // If user not found, return 0 coins
+        return res
+          .status(200)
+          .send({
+            currentCoin: 0,
+            message: "User not found, returning 0 coins",
+          });
       }
 
-      res.send({ currentCoin: user.coin || 0 });
+      // Ensure that user.coin is a number, default to 0 if NaN or invalid
+      const currentCoinValue = parseFloat(user.coin) || 0;
+      res.send({ currentCoin: currentCoinValue });
     });
 
     // Send a ping to confirm a successful connection
@@ -315,6 +408,8 @@ async function run() {
     );
   } finally {
     // Ensures that the client will close when you finish/error
+    // In a serverless environment or for long-running apps, you might manage this differently.
+    // await client.close(); // Only close if exiting application.
   }
 }
 run().catch(console.dir);
