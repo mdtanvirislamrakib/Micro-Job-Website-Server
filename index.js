@@ -46,8 +46,10 @@ const client = new MongoClient(process.env.MONGODB_URI, {
 async function run() {
   const taskCollection = client.db("MicroJob").collection("tasks");
   const coinCollection = client.db("MicroJob").collection("coin");
-  const purchasedCoinCollection = client.db("MicroJob").collection("purchasedCoin");
-  const usersCollection = client.db("MicroJob").collection("users")
+  const purchasedCoinCollection = client
+    .db("MicroJob")
+    .collection("purchasedCoin");
+  const usersCollection = client.db("MicroJob").collection("users");
 
   try {
     // Generate jwt token
@@ -80,31 +82,53 @@ async function run() {
     });
 
     // save or update user info in Db
-    app.post("/users", async(req, res) => {
+    app.post("/users", async (req, res) => {
       const userData = req.body;
-      userData.created_at = Date.now()
-      userData.last_login = Date.now()
-      userData.role = req?.body?.role || "worker"
+      console.log(userData);
+      userData.created_at = new Date().toISOString();
+      userData.last_login = new Date().toISOString();
+      userData.role = req?.body?.role || "worker";
+      userData.coin = req?.body?.coin ?? 0;
 
-      const filter = {email: userData?.email}
+      const filter = { email: userData?.email };
       const updateDoc = {
         $set: {
-          last_login: Date.now()
-        }
-      }
-      const userAlreadyExists = await usersCollection.findOne(filter)
+          last_login: new Date().toISOString(),
+          coin: req?.body?.coin ?? 0,
+        },
+      };
+      const userAlreadyExists = await usersCollection.findOne(filter);
 
-      if(!!userAlreadyExists) {
-        const result = await usersCollection.updateOne(filter, updateDoc)
+      if (!!userAlreadyExists) {
+        const result = await usersCollection.updateOne(filter, updateDoc);
         return res.send(result);
       }
 
-      const result = await usersCollection.insertOne(userData)
+      const result = await usersCollection.insertOne(userData);
       res.send(result);
-    })
+    });
 
 
 
+    // server-side route (Express.js)
+    app.patch("/update-coin", async (req, res) => {
+      const { email, addedCoin } = req.body;
+
+      if (!email || typeof addedCoin !== "number") {
+        return res.status(400).send({ error: "Invalid request" });
+      }
+
+      const filter = { email: email };
+      const update = {
+        $inc: { coin: addedCoin },
+      };
+
+      const result = await usersCollection.updateOne(filter, update);
+      res.send(result);
+    });
+
+
+    
     // add a tasks in DB
     app.post("/add-task", async (req, res) => {
       const task = req.body;
@@ -191,11 +215,10 @@ async function run() {
     });
 
     // get all transaction from Db
-    app.get("/transactions", async(req, res) => {
-      const result = await purchasedCoinCollection.find().toArray()
-      res.send(result)
-    })
-
+    app.get("/transactions", async (req, res) => {
+      const result = await purchasedCoinCollection.find().toArray();
+      res.send(result);
+    });
 
     // get puchased coin data by login user
     app.get("/my-coins", async (req, res) => {
@@ -205,9 +228,14 @@ async function run() {
         return res.status(400).send({ error: "Email is required" });
       }
 
-      const purchases = await purchasedCoinCollection.find({ userEmail: email }).toArray();
-      const totalCoins = purchases.reduce((sum, item) => sum + (item.coinsPurchased || 0), 0);
-      res.send(totalCoins)
+      const purchases = await purchasedCoinCollection
+        .find({ userEmail: email })
+        .toArray();
+      const totalCoins = purchases.reduce(
+        (sum, item) => sum + (item.coinsPurchased || 0),
+        0
+      );
+      res.send(totalCoins);
     });
 
     // Send a ping to confirm a successful connection
