@@ -91,32 +91,32 @@ async function run() {
       userData.coin = req?.body?.coin ?? 0;
 
       const filter = { email: userData?.email };
-      const updateDoc = {
-        $set: {
-          last_login: new Date().toISOString(),
-          coin: req?.body?.coin ?? 0,
-        },
-      };
       const userAlreadyExists = await usersCollection.findOne(filter);
 
       if (!!userAlreadyExists) {
+        const updateDoc = {
+          $set: {
+            last_login: new Date().toISOString(),
+          },
+          $inc: {
+            coin: req?.body?.coin ?? 0,
+          },
+        };
         const result = await usersCollection.updateOne(filter, updateDoc);
         return res.send(result);
       }
-
-      const result = await usersCollection.insertOne(userData);
-      res.send(result);
     });
 
     // server-side route (Express.js)
     app.patch("/update-coin", async (req, res) => {
-      const { email, addedCoin } = req.body;
+      const email = req.body?.email;
+      const addedCoin = parseInt(req.body?.addedCoin);
 
-      if (!email || typeof addedCoin !== "number") {
+      if (!email || isNaN(addedCoin)) {
         return res.status(400).send({ error: "Invalid request" });
       }
 
-      const filter = { email: email };
+      const filter = { email };
       const update = {
         $inc: { coin: addedCoin },
       };
@@ -125,21 +125,35 @@ async function run() {
       res.send(result);
     });
 
-
     // get users role
-    app.get("/user/role/:email", async(req, res) => {
+    app.get("/user/role/:email", async (req, res) => {
       const email = req?.params?.email;
-      const result = await usersCollection.findOne({email})
-      if(!result) return res.status(404).send({message: "User not found"})
-      res.send({role: result?.role})
-    })
-
+      const result = await usersCollection.findOne({ email });
+      if (!result) return res.status(404).send({ message: "User not found" });
+      res.send({ role: result?.role });
+    });
 
     // add a tasks in DB
     app.post("/add-task", async (req, res) => {
       const task = req.body;
       const result = await taskCollection.insertOne(task);
       res.send(result);
+    });
+
+    // decrease coin amount when buyer add a task
+    app.patch("/decrease-coin/:email", async (req, res) => {
+      const { coinToUpdate, status } = req?.body;
+      const email = req?.params?.email;
+      const filter = { email };
+      const updateDoc = {
+        $inc: {
+          coin: status === "decrease" ? -parseInt(coinToUpdate): parseInt(coinToUpdate),
+        },
+      };
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+      
+      console.log(coinToUpdate, status);
     });
 
     // my added tasks in DB
@@ -214,10 +228,44 @@ async function run() {
     });
 
     // post data who purchase coin
+    // app.post("/save-purchase", async (req, res) => {
+    //   const purchasedCoin = req?.body;
+    //   const result = await purchasedCoinCollection.insertOne(purchasedCoin);
+    //   res.send(result);
+    // });
+
+    // Save purchase info and update user coin balance
     app.post("/save-purchase", async (req, res) => {
-      const purchasedCoin = req?.body;
-      const result = await purchasedCoinCollection.insertOne(purchasedCoin);
-      res.send(result);
+      try {
+        const purchasedCoin = req?.body;
+
+        if (
+          !purchasedCoin?.userEmail ||
+          typeof purchasedCoin?.coinsPurchased !== "number"
+        ) {
+          return res.status(400).send({ error: "Invalid purchase data" });
+        }
+
+        // Save purchase info in purchasedCoinCollection
+        const result = await purchasedCoinCollection.insertOne(purchasedCoin);
+
+        //  Increment user's coin in users collection
+        const updateCoin = await usersCollection.updateOne(
+          { email: purchasedCoin.userEmail },
+          { $inc: { coin: purchasedCoin.coinsPurchased } }
+        );
+
+        res.send({
+          success: true,
+          purchaseSaved: result,
+          userCoinUpdated: updateCoin,
+        });
+      } catch (error) {
+        console.error("Save Purchase Error:", error);
+        res
+          .status(500)
+          .send({ error: "Failed to save purchase or update coin." });
+      }
     });
 
     // get all transaction from Db
@@ -227,6 +275,23 @@ async function run() {
     });
 
     // get puchased coin data by login user
+    // app.get("/my-coins", async (req, res) => {
+    //   const email = req?.query?.email;
+
+    //   if (!email) {
+    //     return res.status(400).send({ error: "Email is required" });
+    //   }
+
+    //   const purchases = await purchasedCoinCollection
+    //     .find({ userEmail: email })
+    //     .toArray();
+    //   const totalCoins = purchases.reduce(
+    //     (sum, item) => sum + (item.coinsPurchased || 0),
+    //     0
+    //   );
+    //   res.send(totalCoins);
+    // });
+
     app.get("/my-coins", async (req, res) => {
       const email = req?.query?.email;
 
@@ -234,14 +299,13 @@ async function run() {
         return res.status(400).send({ error: "Email is required" });
       }
 
-      const purchases = await purchasedCoinCollection
-        .find({ userEmail: email })
-        .toArray();
-      const totalCoins = purchases.reduce(
-        (sum, item) => sum + (item.coinsPurchased || 0),
-        0
-      );
-      res.send(totalCoins);
+      const user = await usersCollection.findOne({ email });
+
+      if (!user) {
+        return res.status(404).send({ error: "User not found" });
+      }
+
+      res.send({ currentCoin: user.coin || 0 });
     });
 
     // Send a ping to confirm a successful connection
