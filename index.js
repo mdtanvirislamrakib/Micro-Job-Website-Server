@@ -50,6 +50,7 @@ async function run() {
     .db("MicroJob")
     .collection("purchasedCoin");
   const usersCollection = client.db("MicroJob").collection("users");
+  const taskSubmitCollection = client.db("MicroJob").collection("submittedTask")
 
   try {
     // Generate jwt token
@@ -86,59 +87,14 @@ async function run() {
       }
     });
 
-    // --- Start of /users endpoint changes ---
-    // app.post("/users", async (req, res) => {
-    //   const userData = req.body;
-    //   console.log("Received userData (original):", userData); // Debugging original data
 
-    //   userData.created_at = new Date().toISOString();
-    //   userData.last_login = new Date().toISOString();
-
-    //   // Determine the role. If client sends a role, use it. Otherwise, default to "worker".
-    //   // You might want to add validation if only specific roles are allowed.
-    //   userData.role = req?.body?.role || "worker";
-
-    //   const filter = { email: userData?.email };
-    //   const userAlreadyExists = await usersCollection.findOne(filter);
-
-    //   if (userAlreadyExists) {
-    //     // User already exists, only update last_login
-    //     // We do NOT update 'coin' here, as it would reset the existing balance.
-    //     // If you intend to increment coins on every login, you'd use $inc.
-    //     const updateDoc = {
-    //       $set: {
-    //         last_login: new Date().toISOString(),
-    //       },
-    //     };
-    //     console.log(
-    //       "User exists, updating last_login:",
-    //       userAlreadyExists.email
-    //     );
-    //     const result = await usersCollection.updateOne(filter, updateDoc);
-    //     return res.send(result);
-    //   } else {
-    //     // New user registration, assign initial coins based on role
-    //     let initialCoins = 0;
-    //     if (userData.role === "worker") {
-    //       initialCoins = 10;
-    //     } else if (userData.role === "buyer") {
-    //       // Assuming 'buyer' is the other possible role
-    //       initialCoins = 50;
-    //     }
-    //     // If role is neither, or any other role, initialCoins remains 0.
-
-    //     userData.coin = initialCoins; // Set the initial coin value for new users
-
-    //     console.log(
-    //       "New user registering with role:",
-    //       userData.role,
-    //       "and initial coins:",
-    //       userData.coin
-    //     );
-    //     const result = await usersCollection.insertOne(userData);
-    //     return res.send(result);
-    //   }
-    // });
+    // save submitted task data in db
+    app.post("/submit-task", async(req, res) => {
+      const submittedData = req?.body;
+      console.log("submittedData is", submittedData);
+      const result = await taskSubmitCollection.insertOne(submittedData)
+      res.send(result);
+    })
 
     // আপনার server.js ফাইল থেকে
     app.post("/users", async (req, res) => {
