@@ -80,7 +80,11 @@ async function run() {
 
   // 1. সকল ইউজার ডেটা আনার জন্য API এন্ডপয়েন্ট
   app.get("/users-management", async (req, res) => {
-    const users = await usersCollection.find().toArray();
+    const loginUserEmail = req?.query?.email
+    const filter = {
+      email: { $ne: loginUserEmail }
+    }
+    const users = await usersCollection.find(filter).toArray();
     res.send(users);
   });
 
