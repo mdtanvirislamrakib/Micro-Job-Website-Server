@@ -85,6 +85,78 @@ async function run() {
     res.send(result);
   });
 
+  // ১. নির্দিষ্ট worker এর সমস্ত submissions পাওয়ার জন্য এন্ডপয়েন্ট
+  // GET /api/worker/submissions?workerEmail=<worker_email>
+  app.get("/api/worker/submissions", async (req, res) => {
+    try {
+      const workerEmail = req.query.workerEmail;
+
+      if (!workerEmail) {
+        return res.status(400).send({ message: "Worker email is required." });
+      }
+
+      const workerSubmissions = await submissionCollection
+        .find({ worker_email: workerEmail })
+        .toArray();
+
+      // প্রতিটি সাবমিশনের সাথে সম্পর্কিত টাস্কের title যোগ করুন
+      const taskIds = [
+        ...new Set(workerSubmissions.map((sub) => new ObjectId(sub.task_id))),
+      ];
+      const tasks = await taskCollection
+        .find({ _id: { $in: taskIds } })
+        .toArray();
+
+      const enrichedSubmissions = workerSubmissions.map((sub) => {
+        const task = tasks.find(
+          (t) => t._id.toString() === sub.task_id.toString()
+        );
+        return {
+          ...sub,
+          task_title: task ? task.task_title : "Unknown Task Title", // টাস্ক টাইটেল যোগ করা
+          buyer_name: task ? task.buyer.name : "Unknown Buyer", // বায়ারের নাম যোগ করা
+        };
+      });
+      res.send(enrichedSubmissions);
+    } catch (error) {
+      console.error("Error fetching worker submissions:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
+  // ২. নির্দিষ্ট worker এর জন্য metrics (মোট সাবমিশন, পেন্ডিং সাবমিশন, মোট আয়) পাওয়ার জন্য এন্ডপয়েন্ট
+  // GET /api/worker/stats?workerEmail=<worker_email>
+  app.get("/api/worker/stats", async (req, res) => {
+    try {
+      const workerEmail = req.query.workerEmail; // ফ্রন্টএন্ড থেকে workerEmail পাঠানো হবে
+
+      if (!workerEmail) {
+        return res.status(400).send({ message: "Worker email is required." });
+      }
+
+      const submissions = await submissionCollection
+        .find({ worker_email: workerEmail })
+        .toArray();
+
+      const totalSubmissions = submissions.length;
+      const totalPendingSubmissions = submissions.filter(
+        (sub) => sub.status === "pending"
+      ).length;
+      const totalEarning = submissions
+        .filter((sub) => sub.status === "Approved")
+        .reduce((sum, sub) => sum + sub.payable_amount, 0);
+
+      res.send({
+        totalSubmissions,
+        totalPendingSubmissions,
+        totalEarning: parseFloat(totalEarning.toFixed(2)),
+      });
+    } catch (error) {
+      console.error("Error fetching worker stats:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
   // এই এন্ডপয়েন্টটি AdminHome কম্পোনেন্টের "মোট কর্মী" এবং "মোট ক্রেতা" ডেটা আনার জন্য ব্যবহৃত হবে।
   // এখানে `loginUserEmail` ফিল্টারটি সরিয়ে দেওয়া হয়েছে কারণ এটি AdminHome-এর জন্য অপ্রয়োজনীয়।
   app.get("/users-management", async (req, res) => {
@@ -242,14 +314,16 @@ async function run() {
   // মোট উপলব্ধ কয়েন আনার জন্য
   app.get("/admin/total-available-coins", async (req, res) => {
     try {
-      const result = await usersCollection.aggregate([
-        {
-          $group: {
-            _id: null,
-            totalCoins: { $sum: "$coin" }
-          }
-        }
-      ]).toArray();
+      const result = await usersCollection
+        .aggregate([
+          {
+            $group: {
+              _id: null,
+              totalCoins: { $sum: "$coin" },
+            },
+          },
+        ])
+        .toArray();
       res.send({ totalCoins: result.length > 0 ? result[0].totalCoins : 0 });
     } catch (error) {
       console.error("Error fetching total available coins:", error);
@@ -260,7 +334,9 @@ async function run() {
   // মোট পেন্ডিং উইথড্রয়াল সংখ্যা আনার জন্য
   app.get("/admin/total-pending-withdrawals", async (req, res) => {
     try {
-      const count = await withdrawalsCollection.countDocuments({ status: "pending" });
+      const count = await withdrawalsCollection.countDocuments({
+        status: "pending",
+      });
       res.send({ count });
     } catch (error) {
       console.error("Error fetching total pending withdrawals:", error);
@@ -271,7 +347,9 @@ async function run() {
   // মোট পেন্ডিং সাবমিশন সংখ্যা আনার জন্য
   app.get("/admin/total-pending-submissions", async (req, res) => {
     try {
-      const count = await submissionCollection.countDocuments({ status: "pending" });
+      const count = await submissionCollection.countDocuments({
+        status: "pending",
+      });
       res.send({ count });
     } catch (error) {
       console.error("Error fetching total pending submissions:", error);
@@ -310,7 +388,9 @@ async function run() {
       );
       // নোট: কয়েন worker/withdraw এন্ডপয়েন্টেই কাটা হয়েছে, তাই এখানে আর কাটার প্রয়োজন নেই।
 
-      res.status(200).send({ message: "Withdrawal approved successfully!", result });
+      res
+        .status(200)
+        .send({ message: "Withdrawal approved successfully!", result });
     } catch (error) {
       console.error("Error approving withdrawal request:", error);
       res.status(500).send({ message: "Internal Server Error" });
@@ -451,6 +531,35 @@ async function run() {
     res.send(result);
   });
 
+  // নতুন এন্ডপয়েন্ট: নির্দিষ্ট বায়ারেApproved করা সাবমিশনগুলো পাওয়ার জন্য
+  app.get("/buyer-approved-submissions", async (req, res) => {
+    try {
+      const buyerEmail = req.query.buyer_email;
+      if (!buyerEmail) {
+        return res.status(400).send({ message: "Buyer email is required." });
+      }
+
+      // প্রথমে বায়ারের তৈরি করা টাস্কগুলো খুঁজে বের করুন
+      const buyersTasks = await taskCollection
+        .find({ "buyer.email": buyerEmail })
+        .toArray();
+      const buyerTaskIds = buyersTasks.map((task) => task._id.toString());
+
+      // এরপর সেই টাস্কগুলোর মধ্যে থেকে Approved সাবমিশনগুলো আনুন
+      const approvedSubmissions = await submissionCollection
+        .find({
+          task_id: { $in: buyerTaskIds },
+          status: "Approved",
+        })
+        .toArray();
+
+      res.send(approvedSubmissions);
+    } catch (error) {
+      console.error("Error fetching buyer's approved submissions:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
   app.get("/pending-submissions", async (req, res) => {
     const buyerEmail = req.query.buyer_email;
     const tasks = await taskCollection
@@ -465,7 +574,7 @@ async function run() {
       .toArray();
     const enriched = pending.map((sub) => {
       const task = tasks.find((t) => t._id.toString() === sub.task_id);
-      return { ...sub, task_title: task?.task_title || "Unknown Task" };
+      return { ...sub, task_title: task?.taskTitle || "Unknown Task" };
     });
     res.send(enriched);
   });
