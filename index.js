@@ -151,6 +151,22 @@ async function run() {
     res.send(result);
   });
 
+  app.get("/top-workers", async (req, res) => {
+    try {
+      // Query workers, sort by 'coin' in descending order, and limit to 6
+      const topWorkers = await usersCollection
+        .find({ role: "worker" }) // Filter by role "worker"
+        .sort({ coin: -1 }) // Sort by coin in descending order
+        .limit(6) // Limit to top 6
+        .project({ name: 1, image: 1, coin: 1, email: 1 }) // Only project necessary fields
+        .toArray();
+      res.send(topWorkers);
+    } catch (error) {
+      console.error("Error fetching top workers:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
   // ১. নির্দিষ্ট worker এর সমস্ত submissions পাওয়ার জন্য এন্ডপয়েন্ট
   // GET /api/worker/submissions?workerEmail=<worker_email>
   app.get(
@@ -793,7 +809,6 @@ async function run() {
     res.send(result);
   });
 
-  
   // --- Backend Notification Endpoints & Logic ---
 
   // ১. সাবমিশন অ্যাপ্রুভ করার সময় নোটিফিকেশন তৈরি:
@@ -809,12 +824,10 @@ async function run() {
         _id: new ObjectId(sub.task_id),
       });
       if (!task || req.user.email !== task.buyer.email) {
-        return res
-          .status(403)
-          .send({
-            message:
-              "Forbidden: You can only approve submissions for your own tasks.",
-          });
+        return res.status(403).send({
+          message:
+            "Forbidden: You can only approve submissions for your own tasks.",
+        });
       }
 
       if (!sub || sub.status !== "pending")
@@ -857,12 +870,10 @@ async function run() {
         _id: new ObjectId(sub.task_id),
       });
       if (!task || req.user.email !== task.buyer.email) {
-        return res
-          .status(403)
-          .send({
-            message:
-              "Forbidden: You can only reject submissions for your own tasks.",
-          });
+        return res.status(403).send({
+          message:
+            "Forbidden: You can only reject submissions for your own tasks.",
+        });
       }
 
       if (!sub || sub.status !== "pending")
@@ -980,11 +991,9 @@ async function run() {
     try {
       const userEmail = req.params.email;
       if (req.user.email !== userEmail) {
-        return res
-          .status(403)
-          .send({
-            message: "Forbidden: You can only view your own notifications.",
-          });
+        return res.status(403).send({
+          message: "Forbidden: You can only view your own notifications.",
+        });
       }
 
       const notifications = await notificationsCollection
@@ -1014,12 +1023,10 @@ async function run() {
         }
         // নিশ্চিত করুন যে কেবল নোটিফিকেশন যার জন্য, সেই ব্যবহারকারীই এটিকে পড়া হিসেবে চিহ্নিত করতে পারবে।
         if (req.user.email !== notification.toEmail) {
-          return res
-            .status(403)
-            .send({
-              message:
-                "Forbidden: You can only mark your own notifications as read.",
-            });
+          return res.status(403).send({
+            message:
+              "Forbidden: You can only mark your own notifications as read.",
+          });
         }
 
         const result = await notificationsCollection.updateOne(
