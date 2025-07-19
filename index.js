@@ -52,6 +52,24 @@ async function run() {
   const purchasedCoinCollection = db.collection("purchasedCoin");
   const submissionCollection = db.collection("submittedTask");
   const withdrawalsCollection = db.collection("withdrawals");
+  const notificationsCollection = db.collection("notifications");
+
+  // server.js (run function এর ভেতরে বা বাইরে যেখানে আপনার অন্যান্য ইউটিলিটি ফাংশন আছে)
+
+  const createNotification = async (notificationData) => {
+    try {
+      const result = await notificationsCollection.insertOne({
+        ...notificationData,
+        isRead: false,
+        createdAt: new Date(),
+      });
+      console.log("Notification created:", result.insertedId);
+      return result.insertedId;
+    } catch (error) {
+      console.error("Error creating notification:", error);
+      return null;
+    }
+  };
 
   // for admin verification
   const verifyAdmin = async (req, res, next) => {
@@ -135,42 +153,47 @@ async function run() {
 
   // ১. নির্দিষ্ট worker এর সমস্ত submissions পাওয়ার জন্য এন্ডপয়েন্ট
   // GET /api/worker/submissions?workerEmail=<worker_email>
-  app.get("/api/worker/submissions", verifyToken, verifyWorker, async (req, res) => {
-    try {
-      const workerEmail = req.query.workerEmail;
+  app.get(
+    "/api/worker/submissions",
+    verifyToken,
+    verifyWorker,
+    async (req, res) => {
+      try {
+        const workerEmail = req.query.workerEmail;
 
-      if (!workerEmail) {
-        return res.status(400).send({ message: "Worker email is required." });
+        if (!workerEmail) {
+          return res.status(400).send({ message: "Worker email is required." });
+        }
+
+        const workerSubmissions = await submissionCollection
+          .find({ worker_email: workerEmail })
+          .toArray();
+
+        // প্রতিটি সাবমিশনের সাথে সম্পর্কিত টাস্কের title যোগ করুন
+        const taskIds = [
+          ...new Set(workerSubmissions.map((sub) => new ObjectId(sub.task_id))),
+        ];
+        const tasks = await taskCollection
+          .find({ _id: { $in: taskIds } })
+          .toArray();
+
+        const enrichedSubmissions = workerSubmissions.map((sub) => {
+          const task = tasks.find(
+            (t) => t._id.toString() === sub.task_id.toString()
+          );
+          return {
+            ...sub,
+            task_title: task ? task.task_title : "Unknown Task Title", // টাস্ক টাইটেল যোগ করা
+            buyer_name: task ? task.buyer.name : "Unknown Buyer", // বায়ারের নাম যোগ করা
+          };
+        });
+        res.send(enrichedSubmissions);
+      } catch (error) {
+        console.error("Error fetching worker submissions:", error);
+        res.status(500).send({ message: "Internal Server Error" });
       }
-
-      const workerSubmissions = await submissionCollection
-        .find({ worker_email: workerEmail })
-        .toArray();
-
-      // প্রতিটি সাবমিশনের সাথে সম্পর্কিত টাস্কের title যোগ করুন
-      const taskIds = [
-        ...new Set(workerSubmissions.map((sub) => new ObjectId(sub.task_id))),
-      ];
-      const tasks = await taskCollection
-        .find({ _id: { $in: taskIds } })
-        .toArray();
-
-      const enrichedSubmissions = workerSubmissions.map((sub) => {
-        const task = tasks.find(
-          (t) => t._id.toString() === sub.task_id.toString()
-        );
-        return {
-          ...sub,
-          task_title: task ? task.task_title : "Unknown Task Title", // টাস্ক টাইটেল যোগ করা
-          buyer_name: task ? task.buyer.name : "Unknown Buyer", // বায়ারের নাম যোগ করা
-        };
-      });
-      res.send(enrichedSubmissions);
-    } catch (error) {
-      console.error("Error fetching worker submissions:", error);
-      res.status(500).send({ message: "Internal Server Error" });
     }
-  });
+  );
 
   // ২. নির্দিষ্ট worker এর জন্য metrics (মোট সাবমিশন, পেন্ডিং সাবমিশন, মোট আয়) পাওয়ার জন্য এন্ডপয়েন্ট
   // GET /api/worker/stats?workerEmail=<worker_email>
@@ -217,32 +240,42 @@ async function run() {
     }
   });
 
-  app.delete("/users-management/:id", verifyToken, verifyAdmin, async (req, res) => {
-    const id = req?.params?.id;
-    const filter = { _id: new ObjectId(id) };
-    const result = await usersCollection.deleteOne(filter);
-    res.send(result);
-  });
-
-  app.patch("/users-management/update-role/:id", verifyToken, verifyAdmin, async (req, res) => {
-    const id = req?.params?.id;
-    const { role } = req?.body;
-
-    const validRoles = ["admin", "buyer", "worker"];
-    if (!validRoles.includes(role)) {
-      return res.status(400).send({ message: "Invalid role specified." });
+  app.delete(
+    "/users-management/:id",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      const id = req?.params?.id;
+      const filter = { _id: new ObjectId(id) };
+      const result = await usersCollection.deleteOne(filter);
+      res.send(result);
     }
+  );
 
-    const filter = { _id: new ObjectId(id) };
-    const updateDoc = {
-      $set: {
-        role: role,
-      },
-    };
+  app.patch(
+    "/users-management/update-role/:id",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      const id = req?.params?.id;
+      const { role } = req?.body;
 
-    const result = await usersCollection.updateOne(filter, updateDoc);
-    res.send(result);
-  });
+      const validRoles = ["admin", "buyer", "worker"];
+      if (!validRoles.includes(role)) {
+        return res.status(400).send({ message: "Invalid role specified." });
+      }
+
+      const filter = { _id: new ObjectId(id) };
+      const updateDoc = {
+        $set: {
+          role: role,
+        },
+      };
+
+      const result = await usersCollection.updateOne(filter, updateDoc);
+      res.send(result);
+    }
+  );
 
   app.get("/user/role/:email", async (req, res) => {
     const user = await usersCollection.findOne({ email: req.params.email });
@@ -360,145 +393,180 @@ async function run() {
   // --- AdminHome Dashboard Metrics (কোনো মিডলওয়্যার ছাড়া) ---
 
   // মোট উপলব্ধ কয়েন আনার জন্য
-  app.get("/admin/total-available-coins", verifyToken, verifyAdmin, async (req, res) => {
-    try {
-      const result = await usersCollection
-        .aggregate([
-          {
-            $group: {
-              _id: null,
-              totalCoins: { $sum: "$coin" },
+  app.get(
+    "/admin/total-available-coins",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const result = await usersCollection
+          .aggregate([
+            {
+              $group: {
+                _id: null,
+                totalCoins: { $sum: "$coin" },
+              },
             },
-          },
-        ])
-        .toArray();
-      res.send({ totalCoins: result.length > 0 ? result[0].totalCoins : 0 });
-    } catch (error) {
-      console.error("Error fetching total available coins:", error);
-      res.status(500).send({ message: "Internal Server Error" });
+          ])
+          .toArray();
+        res.send({ totalCoins: result.length > 0 ? result[0].totalCoins : 0 });
+      } catch (error) {
+        console.error("Error fetching total available coins:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     }
-  });
+  );
 
   // মোট পেন্ডিং উইথড্রয়াল সংখ্যা আনার জন্য
-  app.get("/admin/total-pending-withdrawals", verifyToken, verifyAdmin, async (req, res) => {
-    try {
-      const count = await withdrawalsCollection.countDocuments({
-        status: "pending",
-      });
-      res.send({ count });
-    } catch (error) {
-      console.error("Error fetching total pending withdrawals:", error);
-      res.status(500).send({ message: "Internal Server Error" });
+  app.get(
+    "/admin/total-pending-withdrawals",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const count = await withdrawalsCollection.countDocuments({
+          status: "pending",
+        });
+        res.send({ count });
+      } catch (error) {
+        console.error("Error fetching total pending withdrawals:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     }
-  });
+  );
 
   // মোট পেন্ডিং সাবমিশন সংখ্যা আনার জন্য
-  app.get("/admin/total-pending-submissions", verifyToken, verifyAdmin, async (req, res) => {
-    try {
-      const count = await submissionCollection.countDocuments({
-        status: "pending",
-      });
-      res.send({ count });
-    } catch (error) {
-      console.error("Error fetching total pending submissions:", error);
-      res.status(500).send({ message: "Internal Server Error" });
+  app.get(
+    "/admin/total-pending-submissions",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const count = await submissionCollection.countDocuments({
+          status: "pending",
+        });
+        res.send({ count });
+      } catch (error) {
+        console.error("Error fetching total pending submissions:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     }
-  });
+  );
 
   // সমস্ত পেন্ডিং উইথড্রয়াল রিকোয়েস্ট আনার জন্য
-  app.get("/admin/withdrawal-requests", verifyToken, verifyAdmin, async (req, res) => {
-    try {
-      const requests = await withdrawalsCollection
-        .find({ status: "pending" })
-        .toArray();
-      res.send(requests);
-    } catch (error) {
-      console.error("Error fetching withdrawal requests:", error);
-      res.status(500).send({ message: "Internal Server Error" });
+  app.get(
+    "/admin/withdrawal-requests",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const requests = await withdrawalsCollection
+          .find({ status: "pending" })
+          .toArray();
+        res.send(requests);
+      } catch (error) {
+        console.error("Error fetching withdrawal requests:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     }
-  });
+  );
 
   // উইথড্রয়াল রিকোয়েস্ট অ্যাপ্রুভ করার জন্য
-  app.patch("/admin/approve-withdrawal/:id", verifyToken, verifyAdmin, async (req, res) => {
-    try {
-      const id = new ObjectId(req.params.id);
-      const withdrawal = await withdrawalsCollection.findOne({ _id: id });
+  app.patch(
+    "/admin/approve-withdrawal/:id",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const id = new ObjectId(req.params.id);
+        const withdrawal = await withdrawalsCollection.findOne({ _id: id });
 
-      if (!withdrawal || withdrawal.status !== "pending") {
-        return res.status(400).send({
-          message: "Invalid or already processed withdrawal request.",
-        });
+        if (!withdrawal || withdrawal.status !== "pending") {
+          return res.status(400).send({
+            message: "Invalid or already processed withdrawal request.",
+          });
+        }
+
+        const result = await withdrawalsCollection.updateOne(
+          { _id: id },
+          { $set: { status: "Approved" } }
+        );
+        // নোট: কয়েন worker/withdraw এন্ডপয়েন্টেই কাটা হয়েছে, তাই এখানে আর কাটার প্রয়োজন নেই।
+
+        res
+          .status(200)
+          .send({ message: "Withdrawal approved successfully!", result });
+      } catch (error) {
+        console.error("Error approving withdrawal request:", error);
+        res.status(500).send({ message: "Internal Server Error" });
       }
-
-      const result = await withdrawalsCollection.updateOne(
-        { _id: id },
-        { $set: { status: "Approved" } }
-      );
-      // নোট: কয়েন worker/withdraw এন্ডপয়েন্টেই কাটা হয়েছে, তাই এখানে আর কাটার প্রয়োজন নেই।
-
-      res
-        .status(200)
-        .send({ message: "Withdrawal approved successfully!", result });
-    } catch (error) {
-      console.error("Error approving withdrawal request:", error);
-      res.status(500).send({ message: "Internal Server Error" });
     }
-  });
+  );
 
   // উইথড্রয়াল রিকোয়েস্ট রিজেক্ট করার জন্য (এবং কয়েন ফেরত দেওয়ার জন্য)
-  app.patch("/admin/reject-withdrawal/:id", verifyToken, verifyAdmin, async (req, res) => {
-    try {
-      const id = new ObjectId(req.params.id);
-      const withdrawal = await withdrawalsCollection.findOne({ _id: id });
+  app.patch(
+    "/admin/reject-withdrawal/:id",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const id = new ObjectId(req.params.id);
+        const withdrawal = await withdrawalsCollection.findOne({ _id: id });
 
-      if (!withdrawal || withdrawal.status !== "pending") {
-        return res.status(400).send({
-          message: "Invalid or already processed withdrawal request.",
+        if (!withdrawal || withdrawal.status !== "pending") {
+          return res.status(400).send({
+            message: "Invalid or already processed withdrawal request.",
+          });
+        }
+
+        await withdrawalsCollection.updateOne(
+          { _id: id },
+          { $set: { status: "Rejected" } }
+        );
+
+        // কর্মীর ব্যালেন্সে কয়েন ফেরত দিন
+        await usersCollection.updateOne(
+          { email: withdrawal.worker_email },
+          { $inc: { coin: withdrawal.withdrawal_coin } }
+        );
+
+        res.send({
+          message: "Withdrawal request rejected and coins refunded.",
+          workerEmail: withdrawal.worker_email,
         });
+      } catch (error) {
+        console.error("Error rejecting withdrawal request:", error);
+        res.status(500).send({ message: "Internal Server Error" });
       }
-
-      await withdrawalsCollection.updateOne(
-        { _id: id },
-        { $set: { status: "Rejected" } }
-      );
-
-      // কর্মীর ব্যালেন্সে কয়েন ফেরত দিন
-      await usersCollection.updateOne(
-        { email: withdrawal.worker_email },
-        { $inc: { coin: withdrawal.withdrawal_coin } }
-      );
-
-      res.send({
-        message: "Withdrawal request rejected and coins refunded.",
-        workerEmail: withdrawal.worker_email,
-      });
-    } catch (error) {
-      console.error("Error rejecting withdrawal request:", error);
-      res.status(500).send({ message: "Internal Server Error" });
     }
-  });
+  );
 
   // সমস্ত পেন্ডিং সাবমিশন আনার জন্য (অ্যাডমিনের সমস্ত সাবমিশন দেখার জন্য)
-  app.get("/admin/all-pending-submissions", verifyToken, verifyAdmin, async (req, res) => {
-    try {
-      const pending = await submissionCollection
-        .find({ status: "pending" })
-        .toArray();
-      const taskIds = pending.map((sub) => new ObjectId(sub.task_id));
-      const tasks = await taskCollection
-        .find({ _id: { $in: taskIds } })
-        .toArray();
+  app.get(
+    "/admin/all-pending-submissions",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const pending = await submissionCollection
+          .find({ status: "pending" })
+          .toArray();
+        const taskIds = pending.map((sub) => new ObjectId(sub.task_id));
+        const tasks = await taskCollection
+          .find({ _id: { $in: taskIds } })
+          .toArray();
 
-      const enriched = pending.map((sub) => {
-        const task = tasks.find((t) => t._id.toString() === sub.task_id);
-        return { ...sub, task_title: task?.task_title || "Unknown Task" };
-      });
-      res.send(enriched);
-    } catch (error) {
-      console.error("Error fetching all pending submissions:", error);
-      res.status(500).send({ message: "Internal Server Error" });
+        const enriched = pending.map((sub) => {
+          const task = tasks.find((t) => t._id.toString() === sub.task_id);
+          return { ...sub, task_title: task?.task_title || "Unknown Task" };
+        });
+        res.send(enriched);
+      } catch (error) {
+        console.error("Error fetching all pending submissions:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
     }
-  });
+  );
 
   app.get("/my-coins", verifyToken, async (req, res) => {
     const email = req.query.email;
@@ -580,90 +648,110 @@ async function run() {
   });
 
   // নতুন এন্ডপয়েন্ট: নির্দিষ্ট বায়ারেApproved করা সাবমিশনগুলো পাওয়ার জন্য
-  app.get("/buyer-approved-submissions", verifyToken, verifyBuyer, async (req, res) => {
-    try {
-      const buyerEmail = req.query.buyer_email;
-      if (!buyerEmail) {
-        return res.status(400).send({ message: "Buyer email is required." });
-      }
+  app.get(
+    "/buyer-approved-submissions",
+    verifyToken,
+    verifyBuyer,
+    async (req, res) => {
+      try {
+        const buyerEmail = req.query.buyer_email;
+        if (!buyerEmail) {
+          return res.status(400).send({ message: "Buyer email is required." });
+        }
 
-      // প্রথমে বায়ারের তৈরি করা টাস্কগুলো খুঁজে বের করুন
-      const buyersTasks = await taskCollection
+        // প্রথমে বায়ারের তৈরি করা টাস্কগুলো খুঁজে বের করুন
+        const buyersTasks = await taskCollection
+          .find({ "buyer.email": buyerEmail })
+          .toArray();
+        const buyerTaskIds = buyersTasks.map((task) => task._id.toString());
+
+        // এরপর সেই টাস্কগুলোর মধ্যে থেকে Approved সাবমিশনগুলো আনুন
+        const approvedSubmissions = await submissionCollection
+          .find({
+            task_id: { $in: buyerTaskIds },
+            status: "Approved",
+          })
+          .toArray();
+
+        res.send(approvedSubmissions);
+      } catch (error) {
+        console.error("Error fetching buyer's approved submissions:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    }
+  );
+
+  app.get(
+    "/pending-submissions",
+    verifyToken,
+    verifyBuyer,
+    async (req, res) => {
+      const buyerEmail = req.query.buyer_email;
+      const tasks = await taskCollection
         .find({ "buyer.email": buyerEmail })
         .toArray();
-      const buyerTaskIds = buyersTasks.map((task) => task._id.toString());
-
-      // এরপর সেই টাস্কগুলোর মধ্যে থেকে Approved সাবমিশনগুলো আনুন
-      const approvedSubmissions = await submissionCollection
+      const taskIds = tasks.map((t) => t._id.toString());
+      const pending = await submissionCollection
         .find({
-          task_id: { $in: buyerTaskIds },
-          status: "Approved",
+          task_id: { $in: taskIds },
+          status: "pending",
         })
         .toArray();
-
-      res.send(approvedSubmissions);
-    } catch (error) {
-      console.error("Error fetching buyer's approved submissions:", error);
-      res.status(500).send({ message: "Internal Server Error" });
+      const enriched = pending.map((sub) => {
+        const task = tasks.find((t) => t._id.toString() === sub.task_id);
+        return { ...sub, task_title: task?.taskTitle || "Unknown Task" };
+      });
+      res.send(enriched);
     }
-  });
+  );
 
-  app.get("/pending-submissions", verifyToken, verifyBuyer, async (req, res) => {
-    const buyerEmail = req.query.buyer_email;
-    const tasks = await taskCollection
-      .find({ "buyer.email": buyerEmail })
-      .toArray();
-    const taskIds = tasks.map((t) => t._id.toString());
-    const pending = await submissionCollection
-      .find({
-        task_id: { $in: taskIds },
-        status: "pending",
-      })
-      .toArray();
-    const enriched = pending.map((sub) => {
-      const task = tasks.find((t) => t._id.toString() === sub.task_id);
-      return { ...sub, task_title: task?.taskTitle || "Unknown Task" };
-    });
-    res.send(enriched);
-  });
+  app.patch(
+    "/approve-submission/:id",
+    verifyToken,
+    verifyBuyer,
+    async (req, res) => {
+      const id = new ObjectId(req.params.id);
+      const sub = await submissionCollection.findOne({ _id: id });
 
-  app.patch("/approve-submission/:id", verifyToken, verifyBuyer, async (req, res) => {
-    const id = new ObjectId(req.params.id);
-    const sub = await submissionCollection.findOne({ _id: id });
+      if (!sub || sub.status !== "pending")
+        return res.status(400).send({ message: "Invalid submission" });
 
-    if (!sub || sub.status !== "pending")
-      return res.status(400).send({ message: "Invalid submission" });
+      await submissionCollection.updateOne(
+        { _id: id },
+        { $set: { status: "Approved" } }
+      );
+      await usersCollection.updateOne(
+        { email: sub.worker_email },
+        { $inc: { coin: sub.payable_amount } }
+      );
 
-    await submissionCollection.updateOne(
-      { _id: id },
-      { $set: { status: "Approved" } }
-    );
-    await usersCollection.updateOne(
-      { email: sub.worker_email },
-      { $inc: { coin: sub.payable_amount } }
-    );
+      res.send({ message: "Approved", worker_email: sub.worker_email });
+    }
+  );
 
-    res.send({ message: "Approved", worker_email: sub.worker_email });
-  });
+  app.patch(
+    "/reject-submission/:id",
+    verifyToken,
+    verifyBuyer,
+    async (req, res) => {
+      const id = new ObjectId(req.params.id);
+      const sub = await submissionCollection.findOne({ _id: id });
 
-  app.patch("/reject-submission/:id", verifyToken, verifyBuyer, async (req, res) => {
-    const id = new ObjectId(req.params.id);
-    const sub = await submissionCollection.findOne({ _id: id });
+      if (!sub || sub.status !== "pending")
+        return res.status(400).send({ message: "Invalid submission" });
 
-    if (!sub || sub.status !== "pending")
-      return res.status(400).send({ message: "Invalid submission" });
+      await submissionCollection.updateOne(
+        { _id: id },
+        { $set: { status: "Rejected" } }
+      );
+      await taskCollection.updateOne(
+        { _id: new ObjectId(sub.task_id) },
+        { $inc: { requiredWorkers: 1 } }
+      );
 
-    await submissionCollection.updateOne(
-      { _id: id },
-      { $set: { status: "Rejected" } }
-    );
-    await taskCollection.updateOne(
-      { _id: new ObjectId(sub.task_id) },
-      { $inc: { requiredWorkers: 1 } }
-    );
-
-    res.send({ message: "Rejected", task_id: sub.task_id });
-  });
+      res.send({ message: "Rejected", task_id: sub.task_id });
+    }
+  );
 
   // --- Coins / Payment ---
   app.get("/coins", async (req, res) => {
@@ -699,11 +787,252 @@ async function run() {
     const result = await purchasedCoinCollection.find().toArray();
     res.send(result);
   });
-  
+
   app.get("/transactions", verifyToken, verifyBuyer, async (req, res) => {
     const result = await purchasedCoinCollection.find().toArray();
     res.send(result);
   });
+
+  
+  // --- Backend Notification Endpoints & Logic ---
+
+  // ১. সাবমিশন অ্যাপ্রুভ করার সময় নোটিফিকেশন তৈরি:
+  app.patch(
+    "/approve-submission/:id",
+    verifyToken,
+    verifyBuyer,
+    async (req, res) => {
+      const id = new ObjectId(req.params.id);
+      const sub = await submissionCollection.findOne({ _id: id });
+
+      const task = await taskCollection.findOne({
+        _id: new ObjectId(sub.task_id),
+      });
+      if (!task || req.user.email !== task.buyer.email) {
+        return res
+          .status(403)
+          .send({
+            message:
+              "Forbidden: You can only approve submissions for your own tasks.",
+          });
+      }
+
+      if (!sub || sub.status !== "pending")
+        return res
+          .status(400)
+          .send({ message: "Invalid submission or already processed" });
+
+      await submissionCollection.updateOne(
+        { _id: id },
+        { $set: { status: "Approved" } }
+      );
+      await usersCollection.updateOne(
+        { email: sub.worker_email },
+        { $inc: { coin: sub.payable_amount } }
+      );
+
+      // *** নোটিফিকেশন তৈরি করুন (সাবমিশন Approved) ***
+      await createNotification({
+        message: `You have earned ${sub.payable_amount} coins from ${task.buyer.name} for completing "${task.task_title}".`,
+        toEmail: sub.worker_email,
+        fromEmail: task.buyer.email, // যিনি অ্যাপ্রুভ করলেন
+        actionRoute: "/dashboard/worker-home",
+        type: "submission_approved", // নোটিফিকেশনের ধরন (ফ্রন্টএন্ডে ফিল্টারের জন্য)
+      });
+
+      res.send({ message: "Approved", worker_email: sub.worker_email });
+    }
+  );
+
+  // ২. সাবমিশন রিজেক্ট করার সময় নোটিফিকেশন তৈরি:
+  app.patch(
+    "/reject-submission/:id",
+    verifyToken,
+    verifyBuyer,
+    async (req, res) => {
+      const id = new ObjectId(req.params.id);
+      const sub = await submissionCollection.findOne({ _id: id });
+
+      const task = await taskCollection.findOne({
+        _id: new ObjectId(sub.task_id),
+      });
+      if (!task || req.user.email !== task.buyer.email) {
+        return res
+          .status(403)
+          .send({
+            message:
+              "Forbidden: You can only reject submissions for your own tasks.",
+          });
+      }
+
+      if (!sub || sub.status !== "pending")
+        return res
+          .status(400)
+          .send({ message: "Invalid submission or already processed" });
+
+      await submissionCollection.updateOne(
+        { _id: id },
+        { $set: { status: "Rejected" } }
+      );
+      await taskCollection.updateOne(
+        { _id: new ObjectId(sub.task_id) },
+        { $inc: { requiredWorkers: 1 } }
+      );
+
+      // *** নোটিফিকেশন তৈরি করুন (সাবমিশন Rejected) ***
+      await createNotification({
+        message: `Your submission for "${task.task_title}" by ${task.buyer.name} has been rejected.`,
+        toEmail: sub.worker_email,
+        fromEmail: task.buyer.email,
+        actionRoute: "/dashboard/worker-home", // অথবা একটি নির্দিষ্ট "rejected submissions" পেজ
+        type: "submission_rejected",
+      });
+
+      res.send({ message: "Rejected", task_id: sub.task_id });
+    }
+  );
+
+  // ৩. উইথড্রয়াল রিকোয়েস্ট অ্যাপ্রুভ করার সময় নোটিফিকেশন তৈরি (Admin to Worker):
+  app.patch(
+    "/admin/approve-withdrawal/:id",
+    verifyToken,
+    verifyAdmin,
+    async (req, res) => {
+      try {
+        const id = new ObjectId(req.params.id);
+        const withdrawal = await withdrawalsCollection.findOne({ _id: id });
+
+        if (!withdrawal || withdrawal.status !== "pending") {
+          return res.status(400).send({
+            message: "Invalid or already processed withdrawal request.",
+          });
+        }
+
+        const result = await withdrawalsCollection.updateOne(
+          { _id: id },
+          { $set: { status: "Approved" } }
+        );
+
+        // *** নোটিফিকেশন তৈরি করুন (উইথড্রয়াল Approved) ***
+        await createNotification({
+          message: `Your withdrawal request of ${withdrawal.withdrawal_coin} coins (${withdrawal.withdrawal_amount}$) has been approved.`,
+          toEmail: withdrawal.worker_email,
+          fromEmail: req.user.email, // যিনি অ্যাপ্রুভ করলেন (অ্যাডমিন)
+          actionRoute: "/dashboard/worker-home", // অথবা একটি "withdrawal history" পেজ
+          type: "withdrawal_approved",
+        });
+
+        res
+          .status(200)
+          .send({ message: "Withdrawal approved successfully!", result });
+      } catch (error) {
+        console.error("Error approving withdrawal request:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    }
+  );
+
+  // ৪. নতুন সাবমিশন যুক্ত হলে নোটিফিকেশন তৈরি (Worker to Buyer):
+  app.post("/submit-task", verifyToken, verifyWorker, async (req, res) => {
+    const submissionData = req.body;
+
+    if (req.user.email !== submissionData.worker_email) {
+      return res
+        .status(403)
+        .send({ message: "Forbidden: You can only submit tasks as yourself." });
+    }
+
+    const task = await taskCollection.findOne({
+      _id: new ObjectId(submissionData.task_id),
+    });
+
+    if (!task) {
+      return res.status(404).send({ message: "Task not found." });
+    }
+    if (task.requiredWorkers <= 0) {
+      return res
+        .status(400)
+        .send({ message: "No more workers required for this task." });
+    }
+
+    // Task collection থেকে requiredWorkers কমানো
+    await taskCollection.updateOne(
+      { _id: new ObjectId(submissionData.task_id) },
+      { $inc: { requiredWorkers: -1 } }
+    );
+
+    const result = await submissionCollection.insertOne(submissionData);
+
+    // *** নোটিফিকেশন তৈরি করুন (নতুন সাবমিশন) ***
+    await createNotification({
+      message: `${submissionData.worker_name} has submitted a solution for your task: "${task.task_title}".`,
+      toEmail: task.buyer.email, // বায়ারকে নোটিফিকেশন
+      fromEmail: submissionData.worker_email, // যিনি সাবমিট করলেন
+      actionRoute: `/dashboard/buyer-pending-submissions`, // বায়ারের পেন্ডিং সাবমিশন দেখার রাউট
+      type: "new_submission",
+    });
+
+    res.send(result);
+  });
+
+  // ৫. ইউজারের নোটিফিকেশন আনার জন্য এন্ডপয়েন্ট (Authenticated User)
+  app.get("/notifications/:email", verifyToken, async (req, res) => {
+    try {
+      const userEmail = req.params.email;
+      if (req.user.email !== userEmail) {
+        return res
+          .status(403)
+          .send({
+            message: "Forbidden: You can only view your own notifications.",
+          });
+      }
+
+      const notifications = await notificationsCollection
+        .find({ toEmail: userEmail })
+        .sort({ createdAt: -1 }) // নতুনগুলো আগে দেখানোর জন্য ডিসেন্ডিং অর্ডার
+        .toArray();
+      res.send(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
+  // ৬. নোটিফিকেশন পড়া হয়েছে হিসেবে মার্ক করার জন্য এন্ডপয়েন্ট
+  app.patch(
+    "/notifications/mark-as-read/:id",
+    verifyToken,
+    async (req, res) => {
+      try {
+        const notificationId = new ObjectId(req.params.id);
+        const notification = await notificationsCollection.findOne({
+          _id: notificationId,
+        });
+
+        if (!notification) {
+          return res.status(404).send({ message: "Notification not found." });
+        }
+        // নিশ্চিত করুন যে কেবল নোটিফিকেশন যার জন্য, সেই ব্যবহারকারীই এটিকে পড়া হিসেবে চিহ্নিত করতে পারবে।
+        if (req.user.email !== notification.toEmail) {
+          return res
+            .status(403)
+            .send({
+              message:
+                "Forbidden: You can only mark your own notifications as read.",
+            });
+        }
+
+        const result = await notificationsCollection.updateOne(
+          { _id: notificationId },
+          { $set: { isRead: true } }
+        );
+        res.send(result);
+      } catch (error) {
+        console.error("Error marking notification as read:", error);
+        res.status(500).send({ message: "Internal Server Error" });
+      }
+    }
+  );
 
   // DB ping
   // await client.db("admin").command({ ping: 1 });
