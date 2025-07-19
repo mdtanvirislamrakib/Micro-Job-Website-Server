@@ -12,14 +12,29 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(
   cors({
-    // origin: ["http://localhost:5173", "http://localhost:5174"],
-    origin: ["https://microjob-website.netlify.app"],
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    // origin: ["https://microjob-website.netlify.app"],
     credentials: true,
   })
 );
 app.use(express.json());
 app.use(cookieParser());
 
+// Verify Token
+const verifyToken = async (req, res, next) => {
+  const token = req.cookies?.token;
+  if (!token) {
+    return res.status(401).send({ message: "unauthorized access" });
+  }
+  jwt.verify(token, process.env.ACCESS_TOKEN_SECRET, (err, decoded) => {
+    if (err) {
+      console.log(err);
+      return res.status(401).send({ message: "unauthorized access" });
+    }
+    req.user = decoded;
+    next();
+  });
+};
 // MongoDB setup
 const client = new MongoClient(process.env.MONGODB_URI, {
   serverApi: {
@@ -37,6 +52,38 @@ async function run() {
   const purchasedCoinCollection = db.collection("purchasedCoin");
   const submissionCollection = db.collection("submittedTask");
   const withdrawalsCollection = db.collection("withdrawals");
+
+  // for admin verification
+  const verifyAdmin = async (req, res, next) => {
+    const userEmail = req.user?.email;
+    const user = await usersCollection.findOne({ email: userEmail });
+
+    if (!user || user.role !== "admin") {
+      return res.status(403).send({ message: "forbidden access" });
+    }
+    next();
+  };
+
+  // for Buyer Verification
+  const verifyBuyer = async (req, res, next) => {
+    const userEmail = req.user?.email;
+    const user = await usersCollection.findOne({ email: userEmail });
+    if (!user || user.role !== "buyer") {
+      return res.status(403).send({ message: "forbidden access" });
+    }
+    next();
+  };
+
+  // for worker verification
+  const verifyWorker = async (req, res, next) => {
+    const userEmail = req.user?.email;
+    const user = await usersCollection.findOne({ email: userEmail });
+
+    if (!user || user.role !== "worker") {
+      return res.status(403).send({ message: "forbidden access" });
+    }
+    next();
+  };
 
   app.post("/jwt", (req, res) => {
     const token = jwt.sign(req.body, process.env.ACCESS_TOKEN_SECRET, {
@@ -88,7 +135,7 @@ async function run() {
 
   // ১. নির্দিষ্ট worker এর সমস্ত submissions পাওয়ার জন্য এন্ডপয়েন্ট
   // GET /api/worker/submissions?workerEmail=<worker_email>
-  app.get("/api/worker/submissions", async (req, res) => {
+  app.get("/api/worker/submissions", verifyToken, verifyWorker, async (req, res) => {
     try {
       const workerEmail = req.query.workerEmail;
 
@@ -127,7 +174,7 @@ async function run() {
 
   // ২. নির্দিষ্ট worker এর জন্য metrics (মোট সাবমিশন, পেন্ডিং সাবমিশন, মোট আয়) পাওয়ার জন্য এন্ডপয়েন্ট
   // GET /api/worker/stats?workerEmail=<worker_email>
-  app.get("/api/worker/stats", async (req, res) => {
+  app.get("/api/worker/stats", verifyToken, verifyWorker, async (req, res) => {
     try {
       const workerEmail = req.query.workerEmail; // ফ্রন্টএন্ড থেকে workerEmail পাঠানো হবে
 
@@ -160,7 +207,7 @@ async function run() {
 
   // এই এন্ডপয়েন্টটি AdminHome কম্পোনেন্টের "মোট কর্মী" এবং "মোট ক্রেতা" ডেটা আনার জন্য ব্যবহৃত হবে।
   // এখানে `loginUserEmail` ফিল্টারটি সরিয়ে দেওয়া হয়েছে কারণ এটি AdminHome-এর জন্য অপ্রয়োজনীয়।
-  app.get("/users-management", async (req, res) => {
+  app.get("/users-management", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const users = await usersCollection.find({}).toArray();
       res.send(users);
@@ -170,14 +217,14 @@ async function run() {
     }
   });
 
-  app.delete("/users-management/:id", async (req, res) => {
+  app.delete("/users-management/:id", verifyToken, verifyAdmin, async (req, res) => {
     const id = req?.params?.id;
     const filter = { _id: new ObjectId(id) };
     const result = await usersCollection.deleteOne(filter);
     res.send(result);
   });
 
-  app.patch("/users-management/update-role/:id", async (req, res) => {
+  app.patch("/users-management/update-role/:id", verifyToken, verifyAdmin, async (req, res) => {
     const id = req?.params?.id;
     const { role } = req?.body;
 
@@ -202,7 +249,7 @@ async function run() {
     res.send(user ? { role: user.role } : { message: "User not found" });
   });
 
-  app.get("/worker/balance", async (req, res) => {
+  app.get("/worker/balance", verifyToken, verifyWorker, async (req, res) => {
     try {
       const workerEmail = req.query?.email;
 
@@ -223,7 +270,7 @@ async function run() {
     }
   });
 
-  app.post("/worker/withdraw", async (req, res) => {
+  app.post("/worker/withdraw", verifyToken, verifyWorker, async (req, res) => {
     try {
       const {
         worker_email,
@@ -313,7 +360,7 @@ async function run() {
   // --- AdminHome Dashboard Metrics (কোনো মিডলওয়্যার ছাড়া) ---
 
   // মোট উপলব্ধ কয়েন আনার জন্য
-  app.get("/admin/total-available-coins", async (req, res) => {
+  app.get("/admin/total-available-coins", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const result = await usersCollection
         .aggregate([
@@ -333,7 +380,7 @@ async function run() {
   });
 
   // মোট পেন্ডিং উইথড্রয়াল সংখ্যা আনার জন্য
-  app.get("/admin/total-pending-withdrawals", async (req, res) => {
+  app.get("/admin/total-pending-withdrawals", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const count = await withdrawalsCollection.countDocuments({
         status: "pending",
@@ -346,7 +393,7 @@ async function run() {
   });
 
   // মোট পেন্ডিং সাবমিশন সংখ্যা আনার জন্য
-  app.get("/admin/total-pending-submissions", async (req, res) => {
+  app.get("/admin/total-pending-submissions", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const count = await submissionCollection.countDocuments({
         status: "pending",
@@ -359,7 +406,7 @@ async function run() {
   });
 
   // সমস্ত পেন্ডিং উইথড্রয়াল রিকোয়েস্ট আনার জন্য
-  app.get("/admin/withdrawal-requests", async (req, res) => {
+  app.get("/admin/withdrawal-requests", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const requests = await withdrawalsCollection
         .find({ status: "pending" })
@@ -372,7 +419,7 @@ async function run() {
   });
 
   // উইথড্রয়াল রিকোয়েস্ট অ্যাপ্রুভ করার জন্য
-  app.patch("/admin/approve-withdrawal/:id", async (req, res) => {
+  app.patch("/admin/approve-withdrawal/:id", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const id = new ObjectId(req.params.id);
       const withdrawal = await withdrawalsCollection.findOne({ _id: id });
@@ -399,7 +446,7 @@ async function run() {
   });
 
   // উইথড্রয়াল রিকোয়েস্ট রিজেক্ট করার জন্য (এবং কয়েন ফেরত দেওয়ার জন্য)
-  app.patch("/admin/reject-withdrawal/:id", async (req, res) => {
+  app.patch("/admin/reject-withdrawal/:id", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const id = new ObjectId(req.params.id);
       const withdrawal = await withdrawalsCollection.findOne({ _id: id });
@@ -432,7 +479,7 @@ async function run() {
   });
 
   // সমস্ত পেন্ডিং সাবমিশন আনার জন্য (অ্যাডমিনের সমস্ত সাবমিশন দেখার জন্য)
-  app.get("/admin/all-pending-submissions", async (req, res) => {
+  app.get("/admin/all-pending-submissions", verifyToken, verifyAdmin, async (req, res) => {
     try {
       const pending = await submissionCollection
         .find({ status: "pending" })
@@ -453,13 +500,13 @@ async function run() {
     }
   });
 
-  app.get("/my-coins", async (req, res) => {
+  app.get("/my-coins", verifyToken, async (req, res) => {
     const email = req.query.email;
     const user = await usersCollection.findOne({ email });
     res.send({ currentCoin: user?.coin || 0 });
   });
 
-  app.patch("/update-coin", async (req, res) => {
+  app.patch("/update-coin", verifyToken, async (req, res) => {
     const { email, addedCoin } = req.body;
     const result = await usersCollection.updateOne(
       { email },
@@ -468,7 +515,7 @@ async function run() {
     res.send(result);
   });
 
-  app.patch("/decrease-coin/:email", async (req, res) => {
+  app.patch("/decrease-coin/:email", verifyToken, async (req, res) => {
     const { coinToUpdate, status } = req.body;
     const result = await usersCollection.updateOne(
       { email: req.params.email },
@@ -478,12 +525,12 @@ async function run() {
   });
 
   // --- Tasks ---
-  app.post("/add-task", async (req, res) => {
+  app.post("/add-task", verifyToken, verifyBuyer, async (req, res) => {
     const result = await taskCollection.insertOne(req.body);
     res.send(result);
   });
 
-  app.get("/my-tasks/:email", async (req, res) => {
+  app.get("/my-tasks/:email", verifyToken, verifyBuyer, async (req, res) => {
     const result = await taskCollection
       .find({ "buyer.email": req.params.email })
       .toArray();
@@ -522,7 +569,7 @@ async function run() {
   });
 
   // --- Submissions ---
-  app.post("/submit-task", async (req, res) => {
+  app.post("/submit-task", verifyToken, verifyWorker, async (req, res) => {
     const result = await submissionCollection.insertOne(req.body);
     res.send(result);
   });
@@ -533,7 +580,7 @@ async function run() {
   });
 
   // নতুন এন্ডপয়েন্ট: নির্দিষ্ট বায়ারেApproved করা সাবমিশনগুলো পাওয়ার জন্য
-  app.get("/buyer-approved-submissions", async (req, res) => {
+  app.get("/buyer-approved-submissions", verifyToken, verifyBuyer, async (req, res) => {
     try {
       const buyerEmail = req.query.buyer_email;
       if (!buyerEmail) {
@@ -561,7 +608,7 @@ async function run() {
     }
   });
 
-  app.get("/pending-submissions", async (req, res) => {
+  app.get("/pending-submissions", verifyToken, verifyBuyer, async (req, res) => {
     const buyerEmail = req.query.buyer_email;
     const tasks = await taskCollection
       .find({ "buyer.email": buyerEmail })
@@ -580,7 +627,7 @@ async function run() {
     res.send(enriched);
   });
 
-  app.patch("/approve-submission/:id", async (req, res) => {
+  app.patch("/approve-submission/:id", verifyToken, verifyBuyer, async (req, res) => {
     const id = new ObjectId(req.params.id);
     const sub = await submissionCollection.findOne({ _id: id });
 
@@ -599,7 +646,7 @@ async function run() {
     res.send({ message: "Approved", worker_email: sub.worker_email });
   });
 
-  app.patch("/reject-submission/:id", async (req, res) => {
+  app.patch("/reject-submission/:id", verifyToken, verifyBuyer, async (req, res) => {
     const id = new ObjectId(req.params.id);
     const sub = await submissionCollection.findOne({ _id: id });
 
@@ -635,7 +682,7 @@ async function run() {
     res.send({ clientSecret: intent.client_secret });
   });
 
-  app.post("/save-purchase", async (req, res) => {
+  app.post("/save-purchase", verifyToken, async (req, res) => {
     const data = req.body;
     data.coinsPurchased = parseFloat(data.coinsPurchased) || 0;
 
@@ -648,7 +695,12 @@ async function run() {
   });
 
   // এই এন্ডপয়েন্টটি AdminHome কম্পোনেন্টের "মোট লেনদেন" ডেটা আনার জন্য ব্যবহৃত হবে।
-  app.get("/transactions", async (req, res) => {
+  app.get("/transactions-admin", verifyToken, verifyAdmin, async (req, res) => {
+    const result = await purchasedCoinCollection.find().toArray();
+    res.send(result);
+  });
+  
+  app.get("/transactions", verifyToken, verifyBuyer, async (req, res) => {
     const result = await purchasedCoinCollection.find().toArray();
     res.send(result);
   });
