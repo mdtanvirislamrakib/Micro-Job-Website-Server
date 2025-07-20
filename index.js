@@ -12,8 +12,8 @@ const port = process.env.PORT || 3000;
 // Middleware
 app.use(
   cors({
-    // origin: ["http://localhost:5173", "http://localhost:5174"],
-    origin: ["https://microjob-website.netlify.app"],
+    origin: ["http://localhost:5173", "http://localhost:5174"],
+    // origin: ["https://microjob-website.netlify.app"],
     credentials: true,
   })
 );
@@ -55,7 +55,6 @@ async function run() {
   const notificationsCollection = db.collection("notifications");
 
   // server.js (run function এর ভেতরে বা বাইরে যেখানে আপনার অন্যান্য ইউটিলিটি ফাংশন আছে)
-
 
   // for admin verification
   const verifyAdmin = async (req, res, next) => {
@@ -234,7 +233,9 @@ async function run() {
   // এখানে `loginUserEmail` ফিল্টারটি সরিয়ে দেওয়া হয়েছে কারণ এটি AdminHome-এর জন্য অপ্রয়োজনীয়।
   app.get("/users-management", verifyToken, verifyAdmin, async (req, res) => {
     try {
-      const users = await usersCollection.find({}).toArray();
+      const loggedInEmail = req?.query?.email;
+      const query = { email: { $ne: loggedInEmail } };
+      const users = await usersCollection.find(query).toArray();
       res.send(users);
     } catch (error) {
       console.error("Error fetching users for management:", error);
@@ -404,6 +405,11 @@ async function run() {
         const result = await usersCollection
           .aggregate([
             {
+              $match: {
+                coin: { $gt: 0 }, // only include users with coin > 0
+              },
+            },
+            {
               $group: {
                 _id: null,
                 totalCoins: { $sum: "$coin" },
@@ -411,6 +417,7 @@ async function run() {
             },
           ])
           .toArray();
+
         res.send({ totalCoins: result.length > 0 ? result[0].totalCoins : 0 });
       } catch (error) {
         console.error("Error fetching total available coins:", error);
@@ -801,7 +808,6 @@ async function run() {
   });
 
   // --- Backend Notification Endpoints & Logic ---
-
 
   // DB ping
   // await client.db("admin").command({ ping: 1 });
