@@ -34,7 +34,6 @@ This backend demonstrates a strong command of server-side development principles
 * **Secure Payment Integration:** Features seamless integration with **Stripe (`stripe` npm package)** for secure and reliable processing of coin purchases. The backend is configured to handle Stripe webhook events for real-time payment confirmations and updates to user balances.
 * **Worker Withdrawal System:** Manages worker withdrawal requests based on a clearly defined business logic (20 coins = $1, with a minimum withdrawal threshold of 200 coins). Dedicated Admin APIs facilitate the processing and approval of these requests, ensuring accurate adjustment of worker coin balances.
 * **Centralized Notification Service:** Implements comprehensive backend logic to trigger and persist notifications in a dedicated MongoDB collection. Notifications are intelligently generated for key events such as submission approvals/rejections (for workers), new task submissions (for buyers), and withdrawal request approvals (for workers), designed for efficient consumption by the client.
-* **Efficient Data Storage & Management:** Leverages `mongodb` (via `mongoose` ODM) for flexible and scalable document storage, optimized for performance and data integrity.
 * **Environment Configuration:** Utilizes `dotenv` to securely manage sensitive data, including database URIs, API keys, and JWT secrets, ensuring that confidential credentials are never exposed in the codebase.
 * **CORS Management:** Configured with `cors` middleware to enable secure and controlled Cross-Origin Resource Sharing, facilitating seamless communication between the client and server.
 
@@ -43,7 +42,6 @@ This backend demonstrates a strong command of server-side development principles
 * **Node.js (LTS):** The asynchronous, event-driven JavaScript runtime built on Chrome's V8 JavaScript engine.
 * **Express.js (v5.1.0):** A fast, unopinionated, minimalist web framework for building RESTful APIs in Node.js.
 * **MongoDB (v6.17.0):** A leading NoSQL, document-oriented database for high-volume data storage.
-* **Mongoose (implicitly used with mongodb v6.17.0):** An elegant MongoDB object data modeling (ODM) library for Node.js, providing a schema-based solution to model application data.
 * **JSON Web Tokens (jsonwebtoken v9.0.2):** A compact, URL-safe means of representing claims to be transferred between two parties, used for secure, stateless authentication.
 * **Stripe (v18.3.0):** The official Node.js library for integrating Stripe's powerful payment processing functionalities.
 * **Cookie Parser (v1.4.7):** A middleware to parse HTTP cookies attached to client requests.
