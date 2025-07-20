@@ -3,7 +3,7 @@ const express = require("express");
 const cors = require("cors");
 const cookieParser = require("cookie-parser");
 const { MongoClient, ServerApiVersion, ObjectId } = require("mongodb");
-const jwt = require("jsonwebtoken"); // যদিও JWT ব্যবহার হচ্ছে না, মডিউলটি রাখা হয়েছে
+const jwt = require("jsonwebtoken");
 const stripe = require("stripe")(process.env.STRIPE_SK_KEY);
 
 const app = express();
@@ -56,20 +56,6 @@ async function run() {
 
   // server.js (run function এর ভেতরে বা বাইরে যেখানে আপনার অন্যান্য ইউটিলিটি ফাংশন আছে)
 
-  const createNotification = async (notificationData) => {
-    try {
-      const result = await notificationsCollection.insertOne({
-        ...notificationData,
-        isRead: false,
-        createdAt: new Date(),
-      });
-      console.log("Notification created:", result.insertedId);
-      return result.insertedId;
-    } catch (error) {
-      console.error("Error creating notification:", error);
-      return null;
-    }
-  };
 
   // for admin verification
   const verifyAdmin = async (req, res, next) => {
@@ -584,7 +570,12 @@ async function run() {
     }
   );
 
-  app.get("/my-coins", verifyToken, async (req, res) => {
+  app.get("/my-coins", async (req, res) => {
+    const email = req.query.email;
+    const user = await usersCollection.findOne({ email });
+    res.send({ currentCoin: user?.coin || 0 });
+  });
+  app.get("/worker-coins", verifyToken, async (req, res) => {
     const email = req.query.email;
     const user = await usersCollection.findOne({ email });
     res.send({ currentCoin: user?.coin || 0 });
@@ -811,235 +802,6 @@ async function run() {
 
   // --- Backend Notification Endpoints & Logic ---
 
-  // ১. সাবমিশন অ্যাপ্রুভ করার সময় নোটিফিকেশন তৈরি:
-  app.patch(
-    "/approve-submission/:id",
-    verifyToken,
-    verifyBuyer,
-    async (req, res) => {
-      const id = new ObjectId(req.params.id);
-      const sub = await submissionCollection.findOne({ _id: id });
-
-      const task = await taskCollection.findOne({
-        _id: new ObjectId(sub.task_id),
-      });
-      if (!task || req.user.email !== task.buyer.email) {
-        return res.status(403).send({
-          message:
-            "Forbidden: You can only approve submissions for your own tasks.",
-        });
-      }
-
-      if (!sub || sub.status !== "pending")
-        return res
-          .status(400)
-          .send({ message: "Invalid submission or already processed" });
-
-      await submissionCollection.updateOne(
-        { _id: id },
-        { $set: { status: "Approved" } }
-      );
-      await usersCollection.updateOne(
-        { email: sub.worker_email },
-        { $inc: { coin: sub.payable_amount } }
-      );
-
-      // *** নোটিফিকেশন তৈরি করুন (সাবমিশন Approved) ***
-      await createNotification({
-        message: `You have earned ${sub.payable_amount} coins from ${task.buyer.name} for completing "${task.task_title}".`,
-        toEmail: sub.worker_email,
-        fromEmail: task.buyer.email, // যিনি অ্যাপ্রুভ করলেন
-        actionRoute: "/dashboard/worker-home",
-        type: "submission_approved", // নোটিফিকেশনের ধরন (ফ্রন্টএন্ডে ফিল্টারের জন্য)
-      });
-
-      res.send({ message: "Approved", worker_email: sub.worker_email });
-    }
-  );
-
-  // ২. সাবমিশন রিজেক্ট করার সময় নোটিফিকেশন তৈরি:
-  app.patch(
-    "/reject-submission/:id",
-    verifyToken,
-    verifyBuyer,
-    async (req, res) => {
-      const id = new ObjectId(req.params.id);
-      const sub = await submissionCollection.findOne({ _id: id });
-
-      const task = await taskCollection.findOne({
-        _id: new ObjectId(sub.task_id),
-      });
-      if (!task || req.user.email !== task.buyer.email) {
-        return res.status(403).send({
-          message:
-            "Forbidden: You can only reject submissions for your own tasks.",
-        });
-      }
-
-      if (!sub || sub.status !== "pending")
-        return res
-          .status(400)
-          .send({ message: "Invalid submission or already processed" });
-
-      await submissionCollection.updateOne(
-        { _id: id },
-        { $set: { status: "Rejected" } }
-      );
-      await taskCollection.updateOne(
-        { _id: new ObjectId(sub.task_id) },
-        { $inc: { requiredWorkers: 1 } }
-      );
-
-      // *** নোটিফিকেশন তৈরি করুন (সাবমিশন Rejected) ***
-      await createNotification({
-        message: `Your submission for "${task.task_title}" by ${task.buyer.name} has been rejected.`,
-        toEmail: sub.worker_email,
-        fromEmail: task.buyer.email,
-        actionRoute: "/dashboard/worker-home", // অথবা একটি নির্দিষ্ট "rejected submissions" পেজ
-        type: "submission_rejected",
-      });
-
-      res.send({ message: "Rejected", task_id: sub.task_id });
-    }
-  );
-
-  // ৩. উইথড্রয়াল রিকোয়েস্ট অ্যাপ্রুভ করার সময় নোটিফিকেশন তৈরি (Admin to Worker):
-  app.patch(
-    "/admin/approve-withdrawal/:id",
-    verifyToken,
-    verifyAdmin,
-    async (req, res) => {
-      try {
-        const id = new ObjectId(req.params.id);
-        const withdrawal = await withdrawalsCollection.findOne({ _id: id });
-
-        if (!withdrawal || withdrawal.status !== "pending") {
-          return res.status(400).send({
-            message: "Invalid or already processed withdrawal request.",
-          });
-        }
-
-        const result = await withdrawalsCollection.updateOne(
-          { _id: id },
-          { $set: { status: "Approved" } }
-        );
-
-        // *** নোটিফিকেশন তৈরি করুন (উইথড্রয়াল Approved) ***
-        await createNotification({
-          message: `Your withdrawal request of ${withdrawal.withdrawal_coin} coins (${withdrawal.withdrawal_amount}$) has been approved.`,
-          toEmail: withdrawal.worker_email,
-          fromEmail: req.user.email, // যিনি অ্যাপ্রুভ করলেন (অ্যাডমিন)
-          actionRoute: "/dashboard/worker-home", // অথবা একটি "withdrawal history" পেজ
-          type: "withdrawal_approved",
-        });
-
-        res
-          .status(200)
-          .send({ message: "Withdrawal approved successfully!", result });
-      } catch (error) {
-        console.error("Error approving withdrawal request:", error);
-        res.status(500).send({ message: "Internal Server Error" });
-      }
-    }
-  );
-
-  // ৪. নতুন সাবমিশন যুক্ত হলে নোটিফিকেশন তৈরি (Worker to Buyer):
-  app.post("/submit-task", verifyToken, verifyWorker, async (req, res) => {
-    const submissionData = req.body;
-
-    if (req.user.email !== submissionData.worker_email) {
-      return res
-        .status(403)
-        .send({ message: "Forbidden: You can only submit tasks as yourself." });
-    }
-
-    const task = await taskCollection.findOne({
-      _id: new ObjectId(submissionData.task_id),
-    });
-
-    if (!task) {
-      return res.status(404).send({ message: "Task not found." });
-    }
-    if (task.requiredWorkers <= 0) {
-      return res
-        .status(400)
-        .send({ message: "No more workers required for this task." });
-    }
-
-    // Task collection থেকে requiredWorkers কমানো
-    await taskCollection.updateOne(
-      { _id: new ObjectId(submissionData.task_id) },
-      { $inc: { requiredWorkers: -1 } }
-    );
-
-    const result = await submissionCollection.insertOne(submissionData);
-
-    // *** নোটিফিকেশন তৈরি করুন (নতুন সাবমিশন) ***
-    await createNotification({
-      message: `${submissionData.worker_name} has submitted a solution for your task: "${task.task_title}".`,
-      toEmail: task.buyer.email, // বায়ারকে নোটিফিকেশন
-      fromEmail: submissionData.worker_email, // যিনি সাবমিট করলেন
-      actionRoute: `/dashboard/buyer-pending-submissions`, // বায়ারের পেন্ডিং সাবমিশন দেখার রাউট
-      type: "new_submission",
-    });
-
-    res.send(result);
-  });
-
-  // ৫. ইউজারের নোটিফিকেশন আনার জন্য এন্ডপয়েন্ট (Authenticated User)
-  app.get("/notifications/:email", verifyToken, async (req, res) => {
-    try {
-      const userEmail = req.params.email;
-      if (req.user.email !== userEmail) {
-        return res.status(403).send({
-          message: "Forbidden: You can only view your own notifications.",
-        });
-      }
-
-      const notifications = await notificationsCollection
-        .find({ toEmail: userEmail })
-        .sort({ createdAt: -1 }) // নতুনগুলো আগে দেখানোর জন্য ডিসেন্ডিং অর্ডার
-        .toArray();
-      res.send(notifications);
-    } catch (error) {
-      console.error("Error fetching notifications:", error);
-      res.status(500).send({ message: "Internal Server Error" });
-    }
-  });
-
-  // ৬. নোটিফিকেশন পড়া হয়েছে হিসেবে মার্ক করার জন্য এন্ডপয়েন্ট
-  app.patch(
-    "/notifications/mark-as-read/:id",
-    verifyToken,
-    async (req, res) => {
-      try {
-        const notificationId = new ObjectId(req.params.id);
-        const notification = await notificationsCollection.findOne({
-          _id: notificationId,
-        });
-
-        if (!notification) {
-          return res.status(404).send({ message: "Notification not found." });
-        }
-        // নিশ্চিত করুন যে কেবল নোটিফিকেশন যার জন্য, সেই ব্যবহারকারীই এটিকে পড়া হিসেবে চিহ্নিত করতে পারবে।
-        if (req.user.email !== notification.toEmail) {
-          return res.status(403).send({
-            message:
-              "Forbidden: You can only mark your own notifications as read.",
-          });
-        }
-
-        const result = await notificationsCollection.updateOne(
-          { _id: notificationId },
-          { $set: { isRead: true } }
-        );
-        res.send(result);
-      } catch (error) {
-        console.error("Error marking notification as read:", error);
-        res.status(500).send({ message: "Internal Server Error" });
-      }
-    }
-  );
 
   // DB ping
   // await client.db("admin").command({ ping: 1 });
