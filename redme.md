@@ -1,15 +1,7 @@
 # 🛡️ Micro-Task & Earning Platform - Server Side 🌐
 
 ## GitHub Repository (Server-Side):
-[Your Server-Side GitHub Repository Link Here]
-
-## Admin & Test User Credentials:
-* **Admin Email:** [Your Admin Email Here]
-* **Admin Password:** [Your Admin Password Here]
-* **Sample Buyer Email:** [Example Buyer Email Here]
-* **Sample Buyer Password:** [Example Buyer Password Here]
-* **Sample Worker Email:** [Example Worker Email Here]
-* **Sample Worker Password:** [Example Worker Password Here]
+[[Server Repo Link](https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib)]
 
 ---
 
@@ -54,8 +46,8 @@ To get the server-side application running locally:
 
 1.  **Clone the repository:**
     ```bash
-    git clone [Your Server-Side GitHub Repository Link Here]
-    cd [your-server-repo-name]
+    git clone [https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib]
+    cd [b11a12-server-side-mdtanvirislamrakib]
     ```
 2.  **Install dependencies:**
     ```bash
