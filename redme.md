@@ -1,44 +1,55 @@
 # 🛡️ Micro-Task & Earning Platform - Server Side 🌐
 
 ## GitHub Repository (Server-Side):
-[[Server Repo Link](https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib)]
+[https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib](https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib)
+
+## Backend API (Live Link):
+[https://microjob-website-server.vercel.app](https://microjob-website-server.vercel.app)
+
+## Admin & Test User Credentials:
+* **Admin Email:** `tanvirislamrakib93@gmail.com`
+* **Admin Password:** `A@a123456`
+* **Sample Buyer Email:** `rakib7@gmail.com`
+* **Sample Buyer Password:** `A@Aa123456`
+* **Sample Worker Email:** `tahsin@gmail.com`
+* **Sample Worker Password:** `A@a123456`
 
 ---
 
 ## 🌟 Project Overview
-This repository contains the robust and secure backend for the **Micro-Task & Earning Platform**, built with the MERN stack. It serves as the central hub for all business logic, data persistence, and API services, managing user roles (Worker, Buyer, Admin), task lifecycles, and financial transactions. This backend is engineered for scalability, security, and efficient data handling, making it the backbone of the entire platform.
+This repository contains the robust and secure backend for the **Micro-Task & Earning Platform**, built with the MERN stack. It serves as the central hub for all business logic, data persistence, and API services, efficiently managing user roles (Worker, Buyer, Admin), task lifecycles, and financial transactions. This backend is meticulously engineered for scalability, security, and efficient data handling, making it the foundational core of the entire platform.
 
 ## ✨ Key Features & API Design
 
 This backend demonstrates a strong command of server-side development principles, including:
 
-* **RESTful API Architecture:** A well-structured set of RESTful APIs provides clear, efficient, and scalable interaction with the client-side.
-* **Advanced User Authentication & Authorization:** Implemented with `jsonwebtoken` and `cookie-parser` for secure, stateless authentication. Custom middleware enforces **Role-Based Access Control (RBAC)** for Worker, Buyer, and Admin, ensuring that only authenticated and authorized users can access specific routes. Provides detailed error responses (401 Unauthorized, 400 Bad Request for invalid tokens, 403 Forbidden for insufficient permissions) for robust security.
-* **Comprehensive User Management:** Manages user registration, login, profile data, and dynamic role assignments. Handles default coin allocation upon registration (10 for Workers, 50 for Buyers) and updates user coin balances across various transactions.
+* **RESTful API Architecture:** A well-structured and intuitive set of RESTful APIs designed for clear, efficient, and scalable interaction with the client-side.
+* **Advanced User Authentication & Authorization:** Implemented with `jsonwebtoken` and `cookie-parser` for secure, stateless authentication. Custom middleware rigorously enforces **Role-Based Access Control (RBAC)** for Worker, Buyer, and Admin roles, ensuring that only authenticated and authorized users can access specific resources and functionalities. It provides precise error responses (401 Unauthorized, 400 Bad Request for invalid tokens, 403 Forbidden for insufficient permissions) for enhanced security.
+* **Comprehensive User Management:** Manages all aspects of user data, including secure registration, login, profile updates, and dynamic role assignments. It meticulously handles default coin allocation upon registration (10 for Workers, 50 for Buyers) and ensures accurate updates to user coin balances across all transactions.
 * **Dynamic Task Lifecycle Management:**
-    * **Task Creation:** API for buyers to create tasks with specified `required_workers` and `payable_amount`. Incorporates server-side validation and atomic coin deduction from the buyer's balance.
-    * **Task Retrieval & Filtering:** Endpoints to fetch tasks, allowing workers to discover available opportunities efficiently.
-    * **Task Updates & Deletion:** APIs for buyers to modify their tasks and for admins to manage all tasks, including automated coin refunds for deleted/uncompleted tasks.
-* **Robust Submission Workflow:** Manages worker submissions for tasks. Buyers can retrieve and manage pending submissions, with backend logic for approving (crediting worker coins) or rejecting (re-opening task slots) submissions.
-* **Secure Payment Integration:** Seamless integration with **Stripe (`stripe` npm package)** for processing coin purchases, ensuring secure and reliable financial transactions. Handles webhook events for payment confirmations.
-* **Worker Withdrawal System:** Manages worker withdrawal requests based on a defined business logic (20 coins = $1, with a minimum withdrawal threshold of 200 coins). Admin APIs are provided to process and approve these requests, accurately adjusting worker coin balances.
-* **Centralized Notification Service:** Implements backend logic to trigger and persist notifications in a dedicated MongoDB collection. Notifications are generated for key events such as submission approvals/rejections (to workers), new task submissions (to buyers), and withdrawal request approvals (to workers), ready for consumption by the client.
-* **Efficient Data Storage:** Utilizes `mongodb` (via `mongoose` ODM) for flexible and scalable document storage, optimized for performance.
-* **Environment Configuration:** Securely manages sensitive data (database URIs, API keys, JWT secrets) using `dotenv`, ensuring that credentials are not hardcoded.
-* **CORS Management:** Configured with `cors` middleware to enable secure communication between the client and server.
+    * **Task Creation:** Provides robust API endpoints for buyers to create detailed tasks, including specifications for `required_workers` and `payable_amount`. This process incorporates server-side validation and atomic coin deduction from the buyer's balance.
+    * **Task Retrieval & Filtering:** Offers optimized endpoints to fetch task listings, enabling workers to efficiently discover and filter available opportunities.
+    * **Task Updates & Deletion:** Includes APIs for buyers to modify their active tasks and for administrators to manage all tasks across the platform, with automated coin refunds for deleted or uncompleted tasks.
+* **Robust Submission Workflow:** Manages the entire lifecycle of worker task submissions. Buyers can retrieve and manage pending submissions, with backend logic for approving (automatically crediting worker coins) or rejecting (re-opening task slots) submissions seamlessly.
+* **Secure Payment Integration:** Features seamless integration with **Stripe (`stripe` npm package)** for secure and reliable processing of coin purchases. The backend is configured to handle Stripe webhook events for real-time payment confirmations and updates to user balances.
+* **Worker Withdrawal System:** Manages worker withdrawal requests based on a clearly defined business logic (20 coins = $1, with a minimum withdrawal threshold of 200 coins). Dedicated Admin APIs facilitate the processing and approval of these requests, ensuring accurate adjustment of worker coin balances.
+* **Centralized Notification Service:** Implements comprehensive backend logic to trigger and persist notifications in a dedicated MongoDB collection. Notifications are intelligently generated for key events such as submission approvals/rejections (for workers), new task submissions (for buyers), and withdrawal request approvals (for workers), designed for efficient consumption by the client.
+* **Efficient Data Storage & Management:** Leverages `mongodb` (via `mongoose` ODM) for flexible and scalable document storage, optimized for performance and data integrity.
+* **Environment Configuration:** Utilizes `dotenv` to securely manage sensitive data, including database URIs, API keys, and JWT secrets, ensuring that confidential credentials are never exposed in the codebase.
+* **CORS Management:** Configured with `cors` middleware to enable secure and controlled Cross-Origin Resource Sharing, facilitating seamless communication between the client and server.
 
 ## 🛠️ Technologies Used (Server-Side)
 
-* **Node.js (LTS):** The JavaScript runtime environment.
-* **Express.js (v5.1.0):** Fast, minimalist web framework for building RESTful APIs.
-* **MongoDB (v6.17.0):** NoSQL database for data persistence.
-* **Mongoose (implicitly used with mongodb v6.17.0):** Elegant MongoDB object modeling for Node.js.
-* **JSON Web Tokens (jsonwebtoken v9.0.2):** For secure, stateless authentication.
-* **Stripe (v18.3.0):** Official Node.js library for Stripe payment processing.
-* **Cookie Parser (v1.4.7):** Middleware to parse HTTP cookies.
-* **CORS (v2.8.5):** Node.js middleware for enabling Cross-Origin Resource Sharing.
-* **Dotenv (v17.2.0):** Loads environment variables from a `.env` file.
-* **@tanstack/react-query (v5.83.0):** (Note: Primarily a client-side library, its inclusion in server-side dependencies suggests potential isomorphic data fetching patterns or specific build configurations.)
+* **Node.js (LTS):** The asynchronous, event-driven JavaScript runtime built on Chrome's V8 JavaScript engine.
+* **Express.js (v5.1.0):** A fast, unopinionated, minimalist web framework for building RESTful APIs in Node.js.
+* **MongoDB (v6.17.0):** A leading NoSQL, document-oriented database for high-volume data storage.
+* **Mongoose (implicitly used with mongodb v6.17.0):** An elegant MongoDB object data modeling (ODM) library for Node.js, providing a schema-based solution to model application data.
+* **JSON Web Tokens (jsonwebtoken v9.0.2):** A compact, URL-safe means of representing claims to be transferred between two parties, used for secure, stateless authentication.
+* **Stripe (v18.3.0):** The official Node.js library for integrating Stripe's powerful payment processing functionalities.
+* **Cookie Parser (v1.4.7):** A middleware to parse HTTP cookies attached to client requests.
+* **CORS (v2.8.5):** A Node.js package that provides a Connect/Express middleware to enable Cross-Origin Resource Sharing with various options.
+* **Dotenv (v17.2.0):** A zero-dependency module that loads environment variables from a `.env` file into `process.env`.
+* **@tanstack/react-query (v5.83.0):** *Note: While primarily a client-side data-fetching library, its inclusion in server-side dependencies may indicate specific full-stack integration patterns or server-side data hydration techniques.*
 
 ## 🚀 Getting Started
 
@@ -46,8 +57,8 @@ To get the server-side application running locally:
 
 1.  **Clone the repository:**
     ```bash
-    git clone [https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib]
-    cd [b11a12-server-side-mdtanvirislamrakib]
+    git clone [https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib](https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib)
+    cd b11a12-server-side-mdtanvirislamrakib
     ```
 2.  **Install dependencies:**
     ```bash
@@ -64,9 +75,9 @@ To get the server-side application running locally:
     STRIPE_SECRET_KEY=your_stripe_secret_key
     # Add other backend-specific environment variables (e.g., imgBB API key if used on backend)
     ```
-    * **DATABASE_URI:** Your MongoDB connection string (e.g., `mongodb+srv://user:password@cluster.mongodb.net/microtaskdb?retryWrites=true&w=majority`).
-    * **JWT_SECRET:** A strong, random string used to sign your JWTs.
-    * **STRIPE_SECRET_KEY:** Your secret key from Stripe.
+    * **`DATABASE_URI`:** Your MongoDB connection string (e.g., `mongodb+srv://user:password@cluster.mongodb.net/microtaskdb?retryWrites=true&w=majority`).
+    * **`JWT_SECRET`:** A strong, random string used to sign your JWTs.
+    * **`STRIPE_SECRET_KEY`:** Your secret key obtained from Stripe.
 4.  **Start the MongoDB Server:** Ensure your local MongoDB instance is running, or that your cloud MongoDB (e.g., MongoDB Atlas) is accessible.
 5.  **Run the development server:**
     ```bash
@@ -77,13 +88,15 @@ To get the server-side application running locally:
     The server will typically listen on `http://localhost:3000`.
 
 ## 🤝 Contributing
-We welcome contributions to enhance this platform! Please fork the repository, make your changes, and submit a pull request for review. Ensure your code adheres to best practices and includes relevant tests.
+We welcome contributions to enhance this platform! Please fork the repository, make your changes on a new branch, and submit a pull request for review. Ensure your code adheres to best practices and includes relevant tests to maintain quality.
 
 ## 🔮 Future Enhancements
-* **WebSocket Integration:** Implement WebSockets (e.g., Socket.IO) for real-time notification delivery and live updates across the platform.
-* **Email Service Integration:** Integrate with email APIs (e.g., SendGrid, AWS SES) for automated transactional emails (e.g., payment confirmations, task status updates).
-* **Advanced Querying:** Leverage MongoDB's aggregation framework for more complex data analytics and reporting for admin and user dashboards.
-* **Comprehensive Logging:** Implement a robust logging system for monitoring server health and debugging.
+* **WebSocket Integration:** Implement WebSockets (e.g., Socket.IO) for instant, real-time notification delivery and live updates across the platform, significantly improving user experience.
+* **Email Service Integration:** Integrate with robust email APIs (e.g., SendGrid, AWS SES) for automated transactional emails (e.g., payment confirmations, task status updates, password resets).
+* **Advanced Querying:** Leverage MongoDB's powerful aggregation framework for more complex data analytics and reporting, providing deeper insights for admin and user dashboards.
+* **Comprehensive Logging:** Implement a robust logging system using libraries like Winston or Morgan for better monitoring of server health, debugging, and audit trails.
 
 ## 📧 Contact
-For any professional inquiries or collaboration opportunities, please open an issue on this GitHub repository.
+For any professional inquiries, collaboration opportunities, or technical discussions, please feel free to open an issue on this GitHub repository.
+
+---
