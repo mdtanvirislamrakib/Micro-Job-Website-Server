@@ -500,6 +500,18 @@ async function run() {
           { _id: id },
           { $set: { status: "Approved" } }
         );
+
+        // --- Notification: Withdrawal Approved for Worker ---
+        await notificationsCollection.insertOne({
+          userEmail: withdrawal.worker_email,
+          message: `Your ${withdrawal.withdrawal_amount} USD withdrawal has been successfully approved!`,
+          type: "withdrawal_approved",
+          read: false,
+          timestamp: new Date(),
+          relatedEntityId: id, // withdrawal ID
+          link: `/dashboard/worker-withdrawals`, // Link to worker's withdrawal history
+        });
+
         // নোট: কয়েন worker/withdraw এন্ডপয়েন্টেই কাটা হয়েছে, তাই এখানে আর কাটার প্রয়োজন নেই।
 
         res
@@ -538,6 +550,17 @@ async function run() {
           { email: withdrawal.worker_email },
           { $inc: { coin: withdrawal.withdrawal_coin } }
         );
+
+        // --- Notification: Withdrawal Rejected for Worker ---
+        await notificationsCollection.insertOne({
+          userEmail: withdrawal.worker_email,
+          message: `Your ${withdrawal.withdrawal_amount} USD withdrawal request was rejected. Your coins have been refunded.`,
+          type: "withdrawal_rejected",
+          read: false,
+          timestamp: new Date(),
+          relatedEntityId: id, // withdrawal ID
+          link: `/dashboard/worker-withdrawals`, // Link to worker's withdrawal history
+        });
 
         res.send({
           message: "Withdrawal request rejected and coins refunded.",
@@ -652,7 +675,27 @@ async function run() {
 
   // --- Submissions ---
   app.post("/submit-task", verifyToken, verifyWorker, async (req, res) => {
+    const submission = req?.body;
     const result = await submissionCollection.insertOne(req.body);
+
+    // Fetch task details to get buyer's email and task title
+    const task = await taskCollection.findOne({
+      _id: new ObjectId(submission.task_id),
+    });
+
+    // --- Notification: New Task Submission for Buyer ---
+    if (task && task.buyer && task.buyer.email) {
+      await notificationsCollection.insertOne({
+        userEmail: task.buyer.email, // Buyer's email
+        message: `A new submission has been received for your task: "${task.task_title}".`,
+        type: "new_submission",
+        read: false,
+        timestamp: new Date(),
+        relatedEntityId: result.insertedId, // submission ID
+        link: `/dashboard/pending-submissions`, // Link to buyer's pending submissions page
+      });
+    }
+
     res.send(result);
   });
 
@@ -742,6 +785,22 @@ async function run() {
         { $inc: { coin: sub.payable_amount } }
       );
 
+      // --- Notification: Task Approved for Worker ---
+      const task = await taskCollection.findOne({
+        _id: new ObjectId(sub.task_id),
+      });
+      await notificationsCollection.insertOne({
+        userEmail: sub.worker_email,
+        message: `Your task "${
+          task?.task_title || "a task"
+        }" has been approved! You received ${sub.payable_amount} coins.`,
+        type: "task_approved",
+        read: false,
+        timestamp: new Date(),
+        relatedEntityId: new ObjectId(sub.task_id),
+        link: `/dashboard/my-submissions`, // Link to worker's submissions page
+      });
+
       res.send({ message: "Approved", worker_email: sub.worker_email });
     }
   );
@@ -765,6 +824,22 @@ async function run() {
         { _id: new ObjectId(sub.task_id) },
         { $inc: { requiredWorkers: 1 } }
       );
+
+      // --- Notification: Task Rejected for Worker ---
+      const task = await taskCollection.findOne({
+        _id: new ObjectId(sub.task_id),
+      });
+      await notificationsCollection.insertOne({
+        userEmail: sub.worker_email,
+        message: `Your task "${
+          task?.task_title || "a task"
+        }" has been rejected.`,
+        type: "task_rejected",
+        read: false,
+        timestamp: new Date(),
+        relatedEntityId: new ObjectId(sub.task_id),
+        link: `/dashboard/my-submissions`, // Link to worker's submissions page
+      });
 
       res.send({ message: "Rejected", task_id: sub.task_id });
     }
@@ -811,6 +886,99 @@ async function run() {
   });
 
   // --- Backend Notification Endpoints & Logic ---
+
+  // --- Notifications Endpoints ---
+  // Get all notifications for a specific user
+  app.get("/notifications", verifyToken, async (req, res) => {
+    try {
+      const userEmail = req.query.email;
+      if (!userEmail || userEmail !== req.user.email) {
+        return res
+          .status(403)
+          .send({
+            message:
+              "Forbidden access: Cannot view other users' notifications.",
+          });
+      }
+
+      const notifications = await notificationsCollection
+        .find({ userEmail: userEmail })
+        .sort({ timestamp: -1 })
+        .toArray();
+
+      res.send(notifications);
+    } catch (error) {
+      console.error("Error fetching notifications:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
+  // Mark a specific notification as 'read'
+  app.patch("/notifications/mark-read/:id", verifyToken, async (req, res) => {
+    try {
+      const id = new ObjectId(req.params.id);
+      const userEmail = req.user.email;
+
+      const result = await notificationsCollection.updateOne(
+        { _id: id, userEmail: userEmail },
+        { $set: { read: true } }
+      );
+
+      if (result.modifiedCount > 0) {
+        res.send({ message: "Notification marked as read." });
+      } else {
+        res
+          .status(404)
+          .send({ message: "Notification not found or not authorized." });
+      }
+    } catch (error) {
+      console.error("Error marking notification as read:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
+  // Mark all notifications for a user as 'read'
+  app.patch("/notifications/mark-all-read", verifyToken, async (req, res) => {
+    try {
+      const userEmail = req.user.email;
+
+      const result = await notificationsCollection.updateMany(
+        { userEmail: userEmail, read: false },
+        { $set: { read: true } }
+      );
+
+      res.send({
+        message: `${result.modifiedCount} notifications marked as read.`,
+      });
+    } catch (error) {
+      console.error("Error marking all notifications as read:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
+
+  // Delete a specific notification (optional)
+  app.delete("/notifications/:id", verifyToken, async (req, res) => {
+    try {
+      const id = new ObjectId(req.params.id);
+      const userEmail = req.user.email;
+
+      const result = await notificationsCollection.deleteOne({
+        _id: id,
+        userEmail: userEmail,
+      });
+
+      if (result.deletedCount > 0) {
+        res.send({ message: "Notification deleted successfully." });
+      } else {
+        res
+          .status(404)
+          .send({ message: "Notification not found or not authorized." });
+      }
+    } catch (error) {
+      console.error("Error deleting notification:", error);
+      res.status(500).send({ message: "Internal Server Error" });
+    }
+  });
 
   // DB ping
   // await client.db("admin").command({ ping: 1 });
