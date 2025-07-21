@@ -1,4 +1,8 @@
+<<<<<<< HEAD
 # 🚀 Micro-Task & Earning Platform - Server Side 🌐
+=======
+# 🛡️ Micro-Task & Earning Platform - Server Side 🌐
+>>>>>>> 0f59a3685531eb6ed4b30c0eb3418dc810b9f1bb
 
 ## GitHub Repository (Server-Side):
 [https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib](https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib)
@@ -33,8 +37,11 @@ This backend demonstrates a strong command of server-side development principles
 * **Robust Submission Workflow:** Manages the entire lifecycle of worker task submissions. Buyers can retrieve and manage pending submissions, with backend logic for approving (automatically crediting worker coins) or rejecting (re-opening task slots) submissions seamlessly.
 * **Secure Payment Integration:** Features seamless integration with **Stripe (`stripe` npm package)** for secure and reliable processing of coin purchases. The backend is configured to handle Stripe webhook events for real-time payment confirmations and updates to user balances.
 * **Worker Withdrawal System:** Manages worker withdrawal requests based on a clearly defined business logic (20 coins = $1, with a minimum withdrawal threshold of 200 coins). Dedicated Admin APIs facilitate the processing and approval of these requests, ensuring accurate adjustment of worker coin balances.
+<<<<<<< HEAD
 * **Centralized Notification Service:** Implements comprehensive backend logic to trigger and persist notifications in a dedicated MongoDB collection. Notifications are intelligently generated for key events such as submission approvals/rejections (for workers), new task submissions (for buyers), and withdrawal request approvals (for workers), designed for efficient consumption by the client.
 * **Efficient Data Storage & Management:** Leverages `mongodb` (via `mongoose` ODM) for flexible and scalable document storage, optimized for performance and data integrity.
+=======
+>>>>>>> 0f59a3685531eb6ed4b30c0eb3418dc810b9f1bb
 * **Environment Configuration:** Utilizes `dotenv` to securely manage sensitive data, including database URIs, API keys, and JWT secrets, ensuring that confidential credentials are never exposed in the codebase.
 * **CORS Management:** Configured with `cors` middleware to enable secure and controlled Cross-Origin Resource Sharing, facilitating seamless communication between the client and server.
 
