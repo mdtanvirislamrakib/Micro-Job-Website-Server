@@ -687,7 +687,7 @@ async function run() {
     if (task && task.buyer && task.buyer.email) {
       await notificationsCollection.insertOne({
         userEmail: task.buyer.email, // Buyer's email
-        message: `A new submission has been received for your task: "${task.task_title}".`,
+        message: `A new submission has been received for your task: "${task.taskTitle}".`,
         type: "new_submission",
         read: false,
         timestamp: new Date(),
