@@ -656,22 +656,6 @@ async function run() {
     res.send(result);
   });
 
-  // app.post("/submit-task", verifyToken, verifyWorker, async (req, res) => {
-  //   const submission = req.body;
-
-  //   const task = await taskCollection.findOne({
-  //     _id: new ObjectId(submission.task_id),
-  //   });
-  //   if (task?.requiredWorkers > 0) {
-  //     await taskCollection.updateOne(
-  //       { _id: new ObjectId(submission.task_id) },
-  //       { $inc: { requiredWorkers: -1 } }
-  //     );
-  //   }
-
-  //   res.send(result);
-  // });
-
   app.get("/submissionData", async (req, res) => {
     const worker_email = req?.query?.worker_email;
     const result = await submissionCollection
