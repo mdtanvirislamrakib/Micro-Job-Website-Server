@@ -1,8 +1,5 @@
-<<<<<<< HEAD
-# 🚀 Micro-Task & Earning Platform - Server Side 🌐
-=======
+
 # 🛡️ Micro-Task & Earning Platform - Server Side 🌐
->>>>>>> 0f59a3685531eb6ed4b30c0eb3418dc810b9f1bb
 
 ## GitHub Repository (Server-Side):
 [https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib](https://github.com/Programming-Hero-Web-Course4/b11a12-server-side-mdtanvirislamrakib)
