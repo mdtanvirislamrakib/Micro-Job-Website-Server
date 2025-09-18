@@ -37,8 +37,6 @@ This backend demonstrates a strong command of server-side development principles
 <<<<<<< HEAD
 * **Centralized Notification Service:** Implements comprehensive backend logic to trigger and persist notifications in a dedicated MongoDB collection. Notifications are intelligently generated for key events such as submission approvals/rejections (for workers), new task submissions (for buyers), and withdrawal request approvals (for workers), designed for efficient consumption by the client.
 * **Efficient Data Storage & Management:** Leverages `mongodb` (via `mongoose` ODM) for flexible and scalable document storage, optimized for performance and data integrity.
-=======
->>>>>>> 0f59a3685531eb6ed4b30c0eb3418dc810b9f1bb
 * **Environment Configuration:** Utilizes `dotenv` to securely manage sensitive data, including database URIs, API keys, and JWT secrets, ensuring that confidential credentials are never exposed in the codebase.
 * **CORS Management:** Configured with `cors` middleware to enable secure and controlled Cross-Origin Resource Sharing, facilitating seamless communication between the client and server.
 
